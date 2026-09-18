@@ -273,7 +273,7 @@
         n.connect(f); f.connect(g); g.connect(out); n.start(0);
       });
       // 楽器ごとの大きさにそろえる（ピーク）。シンバルは高い音なので、小さくても耳に刺さる
-      const LEVEL = { kick: 0.8, tom: 0.6, snare: 0.5, clap: 0.4, rim: 0.4, brush: 0.35, crash: 0.32, ride: 0.3, hat: 0.3, pedal: 0.25, shaker: 0.25 };
+      const LEVEL = { kick: 0.8, tom: 0.38, snare: 0.4, clap: 0.4, rim: 0.4, brush: 0.35, crash: 0.32, ride: 0.3, hat: 0.3, pedal: 0.25, shaker: 0.25 };
       for (const [name, peak] of Object.entries(LEVEL)) {
         const d = K[name].getChannelData(0);
         let m = 0; for (let i = 0; i < d.length; i++) m = Math.max(m, Math.abs(d[i]));
@@ -444,7 +444,7 @@
         for (let k = 0; k < 2; k++) if ([0, 3, 6, 10, 12].includes(slot + k)) this.drum("rim", t + k * e, 0.35, -0.25);
         if (bi === 0 || bi === 2) this.drum("kick", t, 0.35);
         const comp = this.bar % 2 ? [1, 3, 6] : [0, 3, 5];
-        for (let k = 0; k < 2; k++) if (comp.includes(bi * 2 + k)) this.pluckChord(this.voicing(root, q), t + k * e + hum(), 0.06 + 0.05 * d);
+        for (let k = 0; k < 2; k++) if (comp.includes(bi * 2 + k)) this.pluckChord(this.voicing(root, q), t + k * e + hum(), (0.03 + 0.025 * d) * (k ? 0.8 : 1));
         this.melody(t, t + e, beat, root, C, 1, isHead);
       } else if (S.feel === "lounge") {
         const s16 = beat / 4;
@@ -492,12 +492,14 @@
     }
 
     // ドラムのフィル（区切りの小節の最後の 2 拍）
+    // 目立ちすぎないように：小さく、毎回同じ形にしない（最後の拍だけ、ときどき 2 拍）
     fill(t, beat, bi, S) {
-      const trip = beat / 3;
-      if (S.feel === "lounge") { for (let k = 0; k < 4; k++) this.drum("snare", t + (k * beat) / 4, 0.18 + k * 0.04, 0); return; }
-      if (S.feel === "bossa") { for (let k = 0; k < 3; k++) this.drum("tom", t + k * trip, 0.35, -0.3 + k * 0.3, 1.2 - bi * 0.1 - k * 0.08); return; }
+      const trip = beat / 3, last = bi === S.meter - 1;
+      if (!last && Math.random() < 0.6) return;
+      if (S.feel === "lounge") { for (let k = 0; k < 4; k++) if (Math.random() < 0.75) this.drum("snare", t + (k * beat) / 4, 0.08 + k * 0.025, 0); return; }
+      if (S.feel === "bossa") { for (let k = 0; k < 3; k++) if (Math.random() < 0.7) this.drum("tom", t + k * trip, 0.14 + k * 0.03, -0.3 + k * 0.3, 1.05 - k * 0.08); return; }
       for (let k = 0; k < 3; k++) {
-        if (Math.random() < 0.8) this.drum(bi === S.meter - 1 && k > 0 ? "tom" : "snare", t + k * trip, 0.14 + k * 0.05, (k - 1) * 0.3, 1.1 - k * 0.1);
+        if (Math.random() < 0.7) this.drum(last && k > 0 ? "tom" : "snare", t + k * trip, 0.07 + k * 0.03, (k - 1) * 0.3, 1.05 - k * 0.08);
       }
     }
 
@@ -570,7 +572,7 @@
         if (!this.room(t, t + 0.6)) return;
         const c = this.ctx, o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter();
         o.type = "triangle"; o.frequency.value = mtof(n);
-        f.type = "lowpass"; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(900, t + 0.2);
+        f.type = "lowpass"; f.frequency.setValueAtTime(2000, t); f.frequency.exponentialRampToValueAtTime(700, t + 0.15);
         o.connect(f); f.connect(g); g.connect(this.tone); g.connect(this.verbSend);
         this.env(g, t + i * 0.014, v, 0.003, 0.4);
         o.start(t); o.stop(t + 0.6);
