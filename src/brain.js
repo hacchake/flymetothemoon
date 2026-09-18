@@ -160,6 +160,13 @@
 
     clearSpikes() { this.spikeCount.fill(0); }
 
+    // 新しいハエ：膜電位・シナプス・発火の余韻をすべて静止状態に戻す（配線はそのまま）
+    reset() {
+      this.v.fill(this.P.v0); this.g.fill(0); this.refr.fill(0);
+      this.trace.fill(0); this.flash.fill(0); this.spikeCount.fill(0);
+      for (const r of this.ring) r.fill(0);
+    }
+
     run(ms) {
       const n = Math.round(ms / this.dt);
       let sp = 0;

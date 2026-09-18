@@ -137,7 +137,8 @@
       // 粒子
       ctx.globalCompositeOperation = "lighter";
       for (const p of this.fx) {
-        p.t += 1 / 60; p.x += p.vx / 60; p.y += p.vy / 60; p.vx *= 0.95; p.vy *= 0.95;
+        const dt = opts.dt ?? 1 / 60, drag = Math.pow(0.95, dt * 60);
+        p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= drag; p.vy *= drag;
         const a = Math.max(0, 1 - p.t / p.life);
         ctx.drawImage(glowSprite(p.color), p.x - 5, p.y - 5, 10 * a + 2, 10 * a + 2);
       }
@@ -408,11 +409,12 @@
     setBrain(brain) { this.brain = brain; this.layout = null; }
 
     resize(w, h, dpr) {
-      for (const cv of [this.fx, this.ui]) {
-        cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      this.fxDpr = Math.min(dpr, 1.25); // 残像のキャンバスは解像度を抑える（塗る画素数が一番多い）
+      for (const [cv, r] of [[this.fx, this.fxDpr], [this.ui, dpr]]) {
+        cv.width = Math.round(w * r); cv.height = Math.round(h * r);
         cv.style.width = w + "px"; cv.style.height = h + "px";
       }
-      this.fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.fctx.setTransform(this.fxDpr, 0, 0, this.fxDpr, 0, 0);
       this.uctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.w = w; this.h = h; this.dpr = dpr;
       this.layout = null;
@@ -450,30 +452,50 @@
           size[k] = p.role === "dn" ? 2.6 : p.role === "sensor" ? 0.8 : 1;
         }
       }
-      // 背景の全脳（6000 点）
+      // 背景：全脳（6000 点）と、この回路の静かなニューロンを一度だけ描いておく
       const atlas = document.createElement("canvas");
-      atlas.width = Math.round(this.w * this.dpr); atlas.height = Math.round(this.h * this.dpr);
+      atlas.width = Math.round(this.w * this.fxDpr); atlas.height = Math.round(this.h * this.fxDpr);
       const a = atlas.getContext("2d");
-      a.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      a.setTransform(this.fxDpr, 0, 0, this.fxDpr, 0, 0);
       for (const [x, y, c] of FM.ATLAS || []) {
         a.fillStyle = rgba(ATLAS_COLOR[c], 0.28);
         a.fillRect(F.x + x * F.w, F.y + y * F.h, 1.1, 1.1);
       }
+      for (let i = 0; i < B.N; i++) {
+        a.fillStyle = rgba(col[i], 0.3);
+        a.fillRect(pos[i * 2], pos[i * 2 + 1], 1.2 * size[i], 1.2 * size[i]);
+      }
+      // 光の玉の画像と、DN かどうかは、ニューロンごとに先に決めておく
+      const isDN = new Uint8Array(B.N), isGF = new Uint8Array(B.N);
+      for (const p of B.pops) if (p.role === "dn") for (let i = 0; i < p.n; i++) { isDN[p.offset + i] = 1; if (p.id.startsWith("GF")) isGF[p.offset + i] = 1; }
       // DN の位置（ラベル用）
       const dn = B.pops.filter((p) => p.role === "dn").map((p) => ({ p, x: pos[p.offset * 2], y: pos[p.offset * 2 + 1] }));
-      this.layout = { pos, col, size, atlas, F, dn };
+      // 光のにじみは 1/3 の解像度のキャンバスに点を打ち、拡大して重ねる（1 個ずつ画像を描くより数倍速い）
+      const lo = document.createElement("canvas");
+      lo.width = Math.ceil(this.w / 3); lo.height = Math.ceil(this.h / 3);
+      const colStr = col.map((c) => `rgb(${c[0]},${c[1]},${c[2]})`);
+      // ぼかし用の 2 枚目（小さいキャンバスでぼかすので軽い。filter が無いブラウザではぼかさずに描く）
+      const blur = document.createElement("canvas");
+      blur.width = lo.width; blur.height = lo.height;
+      const bctx = blur.getContext("2d");
+      const canBlur = "filter" in bctx;
+      this.layout = { pos, col, size, atlas, F, dn, isDN, isGF, lo, lctx: lo.getContext("2d"), colStr, blur, bctx, canBlur };
     }
 
-    draw(senses, motor, t, dtFrame) {
+    // simDt：このフレームで脳が進んだ時間（0 のこともある）。dtFrame：画面の経過時間（動きの速さに使う）
+    draw(senses, motor, t, simDt, dtFrame = 1 / 60) {
       if (!this.brain) return;
       if (!this.layout) this.buildLayout();
       const { fctx: c, w, h, brain: B } = this;
-      const { pos, col, size, atlas, F } = this.layout;
+      const { pos, size, atlas, F, isDN, isGF } = this.layout;
+      dtFrame = Math.min(0.1, Math.max(0, dtFrame));
 
-      // 発火の集計
-      let total = 0;
-      for (let i = 0; i < B.N; i++) total += B.spikeCount[i];
-      this.spikesPerSec = this.spikesPerSec * 0.9 + (total / Math.max(1e-3, dtFrame)) * 0.1;
+      // 発火の集計（脳が進んだフレームだけで数える。120 Hz 以上の画面では進まないフレームが混ざる）
+      if (simDt > 0) {
+        let total = 0;
+        for (let i = 0; i < B.N; i++) total += B.spikeCount[i];
+        this.spikesPerSec = this.spikesPerSec * 0.9 + (total / simDt) * 0.1;
+      }
       const act = Math.min(1, this.spikesPerSec / 60000);
       this.activity += (act - this.activity) * 0.1;
 
@@ -488,47 +510,81 @@
       const k = Math.max(0.35, Math.min(1, F.w / 640)); // 狭い画面では光の玉を小さく
 
       // 発火したニューロンから、実際のシナプスに沿って光の粒を飛ばす
-      const budget = 700 - this.comets.length;
-      let made = 0;
-      for (let i = 0; i < B.N && made < budget; i++) {
+      let budget = 500 - this.comets.length;
+      for (let i = 0; i < B.N; i++) {
         const n = B.spikeCount[i];
         if (!n) continue;
+        if (isDN[i] && this.rings.length < 60) this.rings.push({ x: pos[i * 2], y: pos[i * 2 + 1], r: 4, t: 0, gf: isGF[i] === 1 });
+        if (budget <= 0) continue;
         const s0 = B.synStart[i], s1 = B.synStart[i + 1];
-        if (s1 > s0 && Math.random() < 0.25 * n) {
-          const k = s0 + Math.floor(Math.random() * (s1 - s0));
-          const j = B.synPost[k];
-          this.comets.push({ i, j, t: 0, dur: 0.25 + Math.random() * 0.35, inh: B.synW[k] < 0 });
-          made++;
-        }
-        if (B.popOf && B.pops[B.popOf[i]].role === "dn") {
-          this.rings.push({ x: pos[i * 2], y: pos[i * 2 + 1], r: 4, t: 0, gf: B.pops[B.popOf[i]].id.startsWith("GF") });
+        if (s1 > s0 && Math.random() < 0.2 * n) {
+          const q = s0 + Math.floor(Math.random() * (s1 - s0));
+          this.comets.push({ i, j: B.synPost[q], t: 0, dur: 0.25 + Math.random() * 0.35, inh: B.synW[q] < 0 });
+          budget--;
         }
       }
-      for (const m of this.comets) {
-        m.t += dtFrame / m.dur;
-        const u = Math.min(1, m.t), u0 = Math.max(0, u - 0.25);
-        const x0 = pos[m.i * 2], y0 = pos[m.i * 2 + 1], x1 = pos[m.j * 2], y1 = pos[m.j * 2 + 1];
-        const bend = (x1 - x0) * 0.0 + (y1 - y0) * 0.15;
-        const P = (v) => [x0 + (x1 - x0) * v - bend * Math.sin(v * Math.PI), y0 + (y1 - y0) * v + (x1 - x0) * 0.12 * Math.sin(v * Math.PI)];
-        const [ax, ay] = P(u0), [bx, by] = P(u);
-        c.strokeStyle = m.inh ? "rgba(90,170,255,0.28)" : "rgba(255,190,120,0.28)";
+      // 尾はまとめて 2 本のパスで描く（興奮 / 抑制）
+      const heads = [];
+      for (const inh of [false, true]) {
+        c.strokeStyle = inh ? "rgba(90,170,255,0.3)" : "rgba(255,190,120,0.3)";
         c.lineWidth = 1.1;
-        c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
-        c.drawImage(glowSprite(m.inh ? [90, 170, 255] : [255, 200, 140]), bx - 3 * k, by - 3 * k, 6 * k, 6 * k);
+        c.beginPath();
+        for (const m of this.comets) {
+          if (m.inh !== inh) continue;
+          const u = Math.min(1, m.t + dtFrame / m.dur), u0 = Math.max(0, u - 0.25);
+          const x0 = pos[m.i * 2], y0 = pos[m.i * 2 + 1], x1 = pos[m.j * 2], y1 = pos[m.j * 2 + 1];
+          const bx = (y1 - y0) * 0.15, by = (x1 - x0) * 0.12;
+          const s0 = Math.sin(u0 * Math.PI), s1 = Math.sin(u * Math.PI);
+          const hx = x0 + (x1 - x0) * u - bx * s1, hy = y0 + (y1 - y0) * u + by * s1;
+          c.moveTo(x0 + (x1 - x0) * u0 - bx * s0, y0 + (y1 - y0) * u0 + by * s0);
+          c.lineTo(hx, hy);
+          heads.push(hx, hy, inh ? 1 : 0);
+        }
+        c.stroke();
       }
+      const { lo, lctx: g, colStr } = this.layout;
+      g.clearRect(0, 0, lo.width, lo.height);
+      g.globalAlpha = 0.9;
+      for (let q = 0; q < heads.length; q += 3) {
+        g.fillStyle = heads[q + 2] ? "rgb(90,170,255)" : "rgb(255,200,140)";
+        g.fillRect(heads[q] / 3 - 0.6, heads[q + 1] / 3 - 0.6, 1.2, 1.2);
+      }
+      for (const m of this.comets) m.t += dtFrame / m.dur;
       this.comets = this.comets.filter((m) => m.t < 1);
 
-      // ニューロン
+      // 光っているニューロン：にじみ（低解像度）＋ 芯（等倍）。静かなものは背景に焼き込み済み
+      c.globalCompositeOperation = "lighter";
       for (let i = 0; i < B.N; i++) {
-        const tr = B.trace[i], x = pos[i * 2], y = pos[i * 2 + 1];
-        if (tr < 1.5 && B.flash[i] < 0.05) {
-          c.fillStyle = rgba(col[i], 0.25); c.fillRect(x, y, 1.2 * size[i], 1.2 * size[i]);
-          continue;
+        const tr = B.trace[i], fl = B.flash[i];
+        if (tr < 1.5 && fl < 0.05) continue;
+        const r = (0.7 + Math.min(1.6, tr / 60) + fl * 0.6) * size[i] * k;
+        g.globalAlpha = Math.min(1, 0.25 + tr / 150 + fl * 0.3);
+        g.fillStyle = colStr[i];
+        g.fillRect(pos[i * 2] / 3 - r / 2, pos[i * 2 + 1] / 3 - r / 2, r, r);
+        if (tr > 25 || fl > 0.4) {
+          c.globalAlpha = Math.min(0.8, 0.3 + fl * 0.5);
+          c.fillStyle = colStr[i];
+          const cr = 1.6 * size[i];
+          c.fillRect(pos[i * 2] - cr / 2, pos[i * 2 + 1] - cr / 2, cr, cr);
         }
-        const r = (2.5 + Math.min(10, tr / 14) + B.flash[i] * 4) * size[i] * k;
-        c.globalAlpha = Math.min(0.6, 0.18 + tr / 260 + B.flash[i] * 0.25);
-        c.drawImage(glowSprite(col[i]), x - r / 2, y - r / 2, r, r);
       }
+      g.globalAlpha = 1;
+      const { blur, bctx, canBlur } = this.layout;
+      let glow = lo;
+      if (canBlur) {
+        bctx.clearRect(0, 0, blur.width, blur.height);
+        bctx.filter = "blur(1.2px)";
+        bctx.drawImage(lo, 0, 0);
+        bctx.filter = "none";
+        glow = blur;
+      }
+      c.imageSmoothingEnabled = true;
+      c.globalAlpha = 1;
+      c.drawImage(glow, 0, 0, w, h);
+      c.globalAlpha = 0.6;
+      c.drawImage(lo, 0, 0, w, h); // ぼかす前のものも薄く重ねて、光の芯を残す
+      c.globalAlpha = 1;
+      c.globalCompositeOperation = "screen";
 
       // DN の波紋と、GF の衝撃波
       for (const g of this.rings) {
@@ -538,9 +594,9 @@
         c.strokeStyle = g.gf ? `rgba(220,170,255,${a})` : `rgba(255,220,150,${a})`;
         c.lineWidth = g.gf ? 3 : 1.5;
         c.beginPath(); c.arc(g.x, g.y, g.r, 0, TAU); c.stroke();
-        if (g.gf && g.t < 0.02) this.flashA = 0.35;
+        if (g.gf && !g.flashed) { g.flashed = true; this.flashA = Math.max(this.flashA, 0.3); }
       }
-      this.rings = this.rings.filter((g) => g.t < (g.gf ? 1 : 0.4)).slice(-80);
+      this.rings = this.rings.filter((g) => g.t < (g.gf ? 1 : 0.4));
       if (this.flashA > 0) {
         c.fillStyle = `rgba(200,160,255,${this.flashA})`; c.fillRect(0, 0, w, h); this.flashA *= 0.8;
         if (this.flashA < 0.01) this.flashA = 0;

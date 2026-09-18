@@ -71,6 +71,7 @@
         if (e.type === "freed") { this.say("逃げ出した", "good"); }
         if (e.type === "dash") this.score += 5;
         if (e.type === "dead") this.die(e.cause);
+        if (e.type === "moon" && this.demo) continue; // タイトル画面の背景：クリアにしない
         if (e.type === "moon" && !this.stage.sandbox) return this.clear();
         if (e.type === "moon" && this.stage.sandbox) { this.score += 500; this.say("月に届いた", "moon"); world.moon.x = 100 + Math.random() * 800; world.moon.y = 150 + Math.random() * 300; }
       }

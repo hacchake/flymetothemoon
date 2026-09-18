@@ -37,8 +37,8 @@
       this.pointer = { down: false, x: 0, y: 0, in: false };
       this.t = 0; this.acc = 0;
       this.buildBrain();
-      this.load(FM.STAGES[0], { demo: true });
       this.resize();
+      this.load(FM.STAGES[0], { demo: true });
       window.addEventListener("resize", () => this.resize());
       this.bindInput();
       this.showScreen("title");
@@ -60,12 +60,16 @@
     load(stage, { demo = false } = {}) {
       this.stage = stage;
       this.demo = demo;
+      this.paused = false; // 一時停止のままやり直すと、止まった世界が始まってしまう
+      clearTimeout(this.resultTimer); // 前のステージの結果画面が後から出ないように
       this.world = new FM.World(stage, this.rng);
       this.game = new FM.Game(stage);
-      if (demo) this.game.lives = Infinity;
+      if (demo) { this.game.lives = Infinity; this.game.demo = true; }
+      this.newFly(false);
       this.worldView.setWorld(this.world);
       this.tool = "lamp";
-      this.cam.y = this.world.fly.y;
+      this.cam.y = this.camTarget().y;
+      this.cam.x = this.camTarget().x;
       this.buildToolbar();
       $("stage-no").textContent = stage.sandbox ? "∞" : stage.id;
       $("stage-title").textContent = stage.name;
@@ -87,7 +91,8 @@
       }
       for (const [id, label, fn] of [["pause", "一時停止", () => this.togglePause()], ["retry", "やり直す", () => this.load(this.stage)], ["menu", "メニュー", () => this.showScreen("select")]]) {
         const b = document.createElement("button");
-        b.id = "btn-" + id; b.textContent = label; b.addEventListener("click", fn);
+        b.id = "tb-" + id; // 結果画面のボタン（btn-retry など）と ID が重ならないように
+        b.textContent = label; b.addEventListener("click", fn);
         bar.appendChild(b);
       }
       this.setTool(this.tool);
@@ -101,6 +106,9 @@
     }
 
     showScreen(name) {
+      // メニューやタイトルに戻ったら、裏で動き続けるステージをデモに替える
+      // （替えないと、裏でハエが月に届いて結果画面が勝手に出る）
+      if ((name === "select" || name === "title") && !this.demo) this.load(FM.STAGES[0], { demo: true });
       this.screen = name;
       for (const s of ["title", "select", "result"]) $("scr-" + s).classList.toggle("hidden", s !== name);
       const playing = name === "play";
@@ -182,7 +190,7 @@
     toggleBrain() { document.body.classList.toggle("no-brain"); this.resize(); }
     togglePause() {
       this.paused = !this.paused;
-      const b = $("btn-pause"); if (b) b.textContent = this.paused ? "再開" : "一時停止";
+      const b = $("tb-pause"); if (b) b.textContent = this.paused ? "再開" : "一時停止";
     }
 
     // クリック 1 回ぶんの操作
@@ -229,6 +237,21 @@
       this.cam.s = Math.max(wr.width / 1000, Math.min(wr.height / 900, wr.width / 520));
     }
 
+    // ハエを置き直す。脳の状態（膜電位・発火の余韻）も静止に戻す。
+    // 戻さないと、前のハエの興奮が残って、生まれた瞬間に逃避の突進をしてしまう
+    newFly(resetWorld = true) {
+      if (resetWorld) this.world.resetFly();
+      this.brain.reset();
+      this.motor.gfCool = 0;
+    }
+
+    camTarget() {
+      const f = this.world.fly, viewH = (this.vh || 1) / this.cam.s, viewW = (this.vw || 1) / this.cam.s;
+      const y = Math.max(Math.min(f.y - viewH * 0.55, this.world.H - viewH), Math.min(0, this.world.H - viewH));
+      const x = viewW >= 1000 ? (1000 - viewW) / 2 : Math.max(0, Math.min(1000 - viewW, f.x - viewW / 2));
+      return { x, y };
+    }
+
     // ---------------- 1 刻み：感覚 → 脳 → 運動 → 身体 → 世界 → ゲーム ----------------
     tick(dt) {
       const w = this.world, g = this.game, P = this.pointer;
@@ -245,11 +268,11 @@
       const events = w.step(dt, cmd);
       this.effects(events);
       const r = g.update(dt, w, events);
-      if (r === "respawn") { w.resetFly(); this.cam.target = null; }
+      if (r === "respawn") this.newFly();
       if (r === "clear") this.onClear();
       if (r === "over") this.onOver();
-      if (this.demo && w.fly.state === "dead") { w.resetFly(); g.state = "play"; }
-      if (this.demo && events.some((e) => e.type === "moon")) { w.resetFly(); }
+      if (this.demo && w.fly.state === "dead") { this.newFly(); g.state = "play"; }
+      if (this.demo && events.some((e) => e.type === "moon")) this.newFly();
     }
 
     effects(events) {
@@ -278,7 +301,7 @@
       this.progress.stars[st.id] = Math.max(prev, g.stars);
       this.progress.best[st.id] = Math.max(this.progress.best[st.id] || 0, g.score);
       saveProgress(this.progress);
-      setTimeout(() => {
+      this.resultTimer = setTimeout(() => {
         $("res-title").textContent = `STAGE ${st.id}　${st.name}　クリア`;
         $("res-stars").innerHTML = [1, 2, 3].map((k) => `<span class="${k <= g.stars ? "" : "off"}">★</span>`).join("");
         $("res-detail").innerHTML =
@@ -291,7 +314,7 @@
 
     onOver() {
       const st = this.stage;
-      setTimeout(() => {
+      this.resultTimer = setTimeout(() => {
         $("res-title").textContent = `STAGE ${st.id}　${st.name}`;
         $("res-stars").innerHTML = `<span class="off">★★★</span>`;
         $("res-detail").innerHTML = `3 匹とも、月には届かなかった。<br><span style="color:var(--faint)">光を追うのは、ハエの配線がそうなっているから。</span>`;
@@ -312,12 +335,9 @@
       }
 
       // カメラ：ハエを追う（縦にスクロール）
-      const f = this.world.fly, viewH = this.vh / this.cam.s;
-      const target = Math.max(Math.min(f.y - viewH * 0.55, this.world.H - viewH), Math.min(0, this.world.H - viewH));
-      this.cam.y += (target - this.cam.y) * Math.min(1, elapsed * 3);
-      const viewW = this.vw / this.cam.s;
-      const tx = viewW >= 1000 ? (1000 - viewW) / 2 : Math.max(0, Math.min(1000 - viewW, f.x - viewW / 2));
-      this.cam.x += (tx - this.cam.x) * Math.min(1, elapsed * 3);
+      const ct = this.camTarget();
+      this.cam.y += (ct.y - this.cam.y) * Math.min(1, elapsed * 3);
+      this.cam.x += (ct.x - this.cam.x) * Math.min(1, elapsed * 3);
 
       const d = this.motor.dn;
       this.jazz.update({
@@ -327,8 +347,8 @@
         gf: d.gf > 25 && this.motor.gfCool > 0.95,
       });
 
-      this.worldView.draw(this.world, this.senses, this.game, this.cam, this.t, { sight: !this.noSight });
-      if (!document.body.classList.contains("no-brain")) this.brainView.draw(this.senses, this.motor, this.t, Math.max(simDt, 1e-3));
+      this.worldView.draw(this.world, this.senses, this.game, this.cam, this.t, { sight: !this.noSight, dt: elapsed });
+      if (!document.body.classList.contains("no-brain")) this.brainView.draw(this.senses, this.motor, this.t, simDt, elapsed);
       this.hud(elapsed);
       requestAnimationFrame((t) => this.frame(t));
     }
