@@ -2,67 +2,84 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FLY ME TO THE MOON</title>
-<meta name="description" content="FlyWire の配線を素材にした小さな脳が、光に向かって歩く。">
+<meta name="description" content="FlyWire の配線から抜き出した小さな脳を持つハエを、月まで連れていくゲーム。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌕</text></svg>">
 <style>
   :root {
     --bg: #02030a;
-    --ink: #d9def5;
-    --dim: rgba(217, 222, 245, 0.55);
-    --line: rgba(150, 170, 230, 0.18);
-    --moon: #fff4d6;
+    --ink: #e2e6fa;
+    --dim: rgba(226, 230, 250, 0.58);
+    --faint: rgba(226, 230, 250, 0.32);
+    --line: rgba(150, 170, 230, 0.2);
+    --moon: #fff1cf;
     --good: #9df5b4;
     --bad: #ff8a8a;
-    --panel: 380px;
+    --uv: #b9a4ff;
+    --brain-h: clamp(190px, 36vh, 380px);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
-    font-family: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif; overflow: hidden; }
-  #app { display: grid; grid-template-columns: 1fr var(--panel); height: 100%; }
-  body.no-brain #app { grid-template-columns: 1fr 0; }
+    font-family: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif; overflow: hidden;
+    -webkit-user-select: none; user-select: none; }
+  #app { display: grid; grid-template-rows: 1fr var(--brain-h); height: 100%; }
+  body.no-brain #app { grid-template-rows: 1fr 0; }
   body.no-brain #brain-wrap { display: none; }
-  #world-wrap { position: relative; min-width: 0; }
-  #world { display: block; cursor: crosshair; touch-action: none; }
-  #brain-wrap { position: relative; border-left: 1px solid var(--line); background: rgba(5, 8, 22, 0.9); }
-  #brain { display: block; }
-  #brain-title { position: absolute; top: 10px; left: 16px; font-size: 11px; letter-spacing: 0.18em; color: var(--dim); pointer-events: none; }
+  #world-wrap { position: relative; min-height: 0; overflow: hidden; }
+  #world { display: block; touch-action: none; cursor: crosshair; }
+  #brain-wrap { position: relative; border-top: 1px solid var(--line); background: #03030c; overflow: hidden; }
+  #brain-fx, #brain-ui { position: absolute; inset: 0; display: block; }
 
-  header { position: absolute; top: 18px; left: 22px; pointer-events: none; }
-  h1 { margin: 0; font-weight: 300; font-size: clamp(18px, 2.6vw, 30px); letter-spacing: 0.42em; color: var(--moon);
-    text-shadow: 0 0 18px rgba(255, 244, 214, 0.35); }
-  .sub { margin-top: 6px; font-size: 11px; letter-spacing: 0.12em; color: var(--dim); }
-
-  #stats { position: absolute; top: 18px; right: 20px; text-align: right; font-size: 12px; color: var(--dim); pointer-events: none;
-    display: grid; grid-template-columns: auto auto; gap: 2px 12px; }
+  /* HUD */
+  .hud { position: absolute; pointer-events: none; }
+  #hud-top { top: 12px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  #stage-name { font-size: 12px; letter-spacing: 0.22em; color: var(--dim); }
+  #stage-name b { display: block; font-size: 18px; font-weight: 300; letter-spacing: 0.3em; color: var(--moon); margin-top: 2px; }
+  #lives { margin-top: 6px; font-size: 14px; letter-spacing: 4px; }
+  #stats { text-align: right; font-size: 11px; color: var(--dim); display: grid; grid-template-columns: auto auto; gap: 1px 10px; }
   #stats b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
-  #stats .big b { font-size: 20px; color: var(--moon); }
-  #energy-box { grid-column: 1 / 3; margin-top: 6px; width: 180px; justify-self: end; height: 4px; background: rgba(255,255,255,0.1); }
-  #energy { height: 100%; width: 100%; background: var(--good); transition: width 0.2s; }
-  #energy.low { background: var(--bad); }
+  #stats .big { font-size: 22px; color: var(--moon); font-weight: 300; }
+  .bar { grid-column: 1 / 3; justify-self: end; width: 150px; height: 4px; background: rgba(255,255,255,0.1); margin-top: 4px; border-radius: 2px; overflow: hidden; }
+  .bar > div { height: 100%; width: 100%; background: var(--good); transition: width 0.15s; }
+  .bar.low > div { background: var(--bad); }
+  #msgs { top: 34%; left: 0; right: 0; text-align: center; }
+  .msg { font-size: 15px; letter-spacing: 0.2em; margin: 6px; text-shadow: 0 0 12px rgba(0,0,0,0.9); }
+  .msg.good { color: var(--good); } .msg.bad { color: var(--bad); } .msg.moon { color: var(--moon); font-size: 22px; }
+  #hint { bottom: 64px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--dim); letter-spacing: 0.12em; padding: 0 16px; }
 
-  #msgs { position: absolute; top: 40%; left: 0; right: 0; text-align: center; pointer-events: none; }
-  .msg { font-size: 15px; letter-spacing: 0.15em; margin: 4px; }
-  .msg.good { color: var(--good); } .msg.bad { color: var(--bad); } .msg.moon { color: var(--moon); font-size: 20px; }
+  #toolbar { position: absolute; bottom: 12px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; padding: 0 10px; }
+  button { background: rgba(18, 22, 50, 0.78); color: var(--ink); border: 1px solid var(--line); border-radius: 999px;
+    padding: 8px 14px; font: inherit; font-size: 12px; letter-spacing: 0.08em; cursor: pointer; backdrop-filter: blur(4px); }
+  button:hover { border-color: rgba(210, 220, 255, 0.55); }
+  button.on { background: rgba(255, 241, 207, 0.18); border-color: var(--moon); color: var(--moon); }
+  button:disabled { opacity: 0.35; cursor: default; }
+  button .n { opacity: 0.6; margin-left: 4px; font-variant-numeric: tabular-nums; }
+  button kbd { opacity: 0.45; font-family: inherit; margin-right: 5px; font-size: 10px; }
 
-  footer { position: absolute; left: 0; right: 0; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
-  #tools { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; pointer-events: auto; padding: 0 12px; }
-  button { background: rgba(20, 26, 55, 0.75); color: var(--ink); border: 1px solid var(--line); border-radius: 999px;
-    padding: 7px 14px; font: inherit; font-size: 12px; letter-spacing: 0.08em; cursor: pointer; }
-  button:hover { border-color: rgba(200, 210, 255, 0.5); }
-  button.on { background: rgba(255, 244, 214, 0.16); border-color: var(--moon); color: var(--moon); }
-  button kbd { opacity: 0.5; font-family: inherit; margin-right: 4px; }
-  #hint { font-size: 11px; color: var(--dim); letter-spacing: 0.1em; }
-  #question { position: absolute; left: 22px; bottom: 16px; font-size: 11px; color: rgba(217,222,245,0.35); letter-spacing: 0.1em; pointer-events: none; max-width: 30ch; line-height: 1.6; }
-  #debug { position: absolute; left: 22px; top: 80px; font: 11px/1.5 ui-monospace, monospace; color: var(--dim); white-space: pre; pointer-events: none; }
-  .hidden { display: none; }
-
-  @media (max-width: 860px) {
-    #app { grid-template-columns: 1fr; grid-template-rows: 1fr 0; }
-    body:not(.no-brain) #app { grid-template-rows: 58% 42%; }
-    #brain-wrap { border-left: 0; border-top: 1px solid var(--line); }
+  /* 画面（タイトル・ステージ選択・結果） */
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; padding: 24px 16px; text-align: center; background: radial-gradient(ellipse at 50% 40%, rgba(5,6,20,0.35), rgba(2,3,10,0.82)); }
+  .screen.hidden, .hidden { display: none !important; }
+  .title { font-weight: 200; font-size: clamp(26px, 6vw, 64px); letter-spacing: 0.35em; margin: 0; color: var(--moon);
+    text-shadow: 0 0 30px rgba(255, 241, 207, 0.45), 0 0 80px rgba(255, 241, 207, 0.2); padding-left: 0.35em; }
+  .lead { font-size: 15px; letter-spacing: 0.2em; color: var(--ink); margin: 0; }
+  .note { font-size: 12px; line-height: 1.9; color: var(--dim); max-width: 46ch; margin: 0; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .big-btn { font-size: 14px; padding: 12px 26px; letter-spacing: 0.2em; }
+  #stage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; width: min(760px, 100%); }
+  .card { text-align: left; border-radius: 14px; padding: 12px 14px; line-height: 1.5; }
+  .card small { display: block; color: var(--faint); font-size: 10px; letter-spacing: 0.2em; }
+  .card .stars { color: var(--moon); letter-spacing: 3px; font-size: 13px; }
+  .stars-big { font-size: 40px; letter-spacing: 12px; color: var(--moon); text-shadow: 0 0 20px rgba(255, 241, 207, 0.6); }
+  .stars-big .off { color: rgba(255,255,255,0.15); text-shadow: none; }
+  #corner { position: absolute; top: 10px; right: 12px; display: flex; gap: 6px; z-index: 5; }
+  #corner button { padding: 5px 10px; font-size: 11px; }
+  #question { position: absolute; left: 16px; bottom: 58px; font-size: 11px; color: var(--faint); letter-spacing: 0.1em; line-height: 1.7; max-width: 26ch; pointer-events: none; }
+  @media (max-width: 700px) {
     #question { display: none; }
-    #stats { top: 64px; }
+    #hud-top { top: 44px; }
+    button { padding: 7px 11px; }
   }
 </style>
 </head>
@@ -70,45 +87,73 @@
 <div id="app">
   <div id="world-wrap">
     <canvas id="world"></canvas>
-    <header>
-      <h1>FLY ME TO THE MOON</h1>
-      <div class="sub">FlyWire の配線からできた小さな脳が、光を見て歩く</div>
-    </header>
-    <div id="stats">
-      <span class="big">SCORE</span><span class="big"><b id="score">0</b></span>
-      <span>月までの距離</span><span><b id="dist">0</b> px</span>
-      <span>生存時間</span><span><b id="time">0</b> 秒</span>
-      <span>試行</span><span><b id="trials">1</b></span>
-      <span>月に届いた回数</span><span><b id="landings">0</b></span>
-      <div id="energy-box"><div id="energy"></div></div>
-    </div>
-    <div id="msgs"></div>
-    <div id="debug" class="hidden"></div>
-    <div id="question">このハエの中に「月」はない。<br>あるのは光と、神経の発火と、脚の動きだけ。</div>
-    <footer>
-      <div id="tools">
-        <button data-mode="lamp"><kbd>1</kbd>光</button>
-        <button data-mode="moon"><kbd>2</kbd>月</button>
-        <button data-mode="food"><kbd>3</kbd>餌</button>
-        <button data-mode="rock"><kbd>4</kbd>岩</button>
-        <button id="btn-pause">一時停止</button>
-        <button id="btn-reset">やり直す</button>
-        <button id="btn-brain">脳</button>
+
+    <div id="hud-top" class="hud hidden">
+      <div>
+        <div id="stage-name">STAGE <span id="stage-no"></span><b id="stage-title"></b></div>
+        <div id="lives"></div>
       </div>
-      <div id="hint"></div>
-    </footer>
+      <div id="stats">
+        <span>SCORE</span><span class="big"><b id="score">0</b></span>
+        <span>月まで</span><span><b id="dist">0</b> m</span>
+        <span>時間</span><span><b id="time">0</b> 秒</span>
+        <div class="bar" id="energy-bar" title="エネルギー"><div id="energy"></div></div>
+      </div>
+    </div>
+    <div id="msgs" class="hud"></div>
+    <div id="hint" class="hud"></div>
+    <div id="question">このハエの中に「月」はない。<br>あるのは光と、神経の発火と、翅の動きだけ。</div>
+    <div id="toolbar" class="hidden"></div>
+
+    <div id="corner">
+      <button id="btn-sound" title="音 (M)">♪ 音</button>
+      <button id="btn-circuit" title="脳の回路を切り替える">回路：FlyWire</button>
+      <button id="btn-brain" title="脳の表示 (B)">脳</button>
+    </div>
+
+    <section id="scr-title" class="screen">
+      <h1 class="title">FLY ME TO THE MOON</h1>
+      <p class="lead">このハエを、月まで連れていけるか？</p>
+      <p class="note">ハエの脳は、実在するショウジョウバエの全脳配線 FlyWire から抜き出した約 2,400 個のニューロン。
+        あなたにできるのは、光を灯し、餌を置き、雲を浮かべることだけ。決めるのは、ハエの神経回路。</p>
+      <div class="row">
+        <button class="big-btn" id="btn-start">はじめる</button>
+        <button class="big-btn" id="btn-sandbox">自由実験</button>
+      </div>
+    </section>
+
+    <section id="scr-select" class="screen hidden">
+      <p class="lead">ステージを選ぶ</p>
+      <div id="stage-grid"></div>
+      <div class="row"><button id="btn-back">もどる</button></div>
+    </section>
+
+    <section id="scr-result" class="screen hidden">
+      <p class="lead" id="res-title"></p>
+      <div class="stars-big" id="res-stars"></div>
+      <p class="note" id="res-detail"></p>
+      <div class="row">
+        <button class="big-btn" id="btn-next">次へ</button>
+        <button id="btn-retry">もう一度</button>
+        <button id="btn-menu">ステージ選択</button>
+      </div>
+    </section>
   </div>
   <div id="brain-wrap">
-    <canvas id="brain"></canvas>
-    <div id="brain-title">BRAIN — 左半球 ｜ 右半球</div>
+    <canvas id="brain-fx"></canvas>
+    <canvas id="brain-ui"></canvas>
   </div>
 </div>
+<script src="src/circuit_flywire.js"></script>
+<script src="src/brain_atlas.js"></script>
 <script src="src/circuit.js"></script>
 <script src="src/brain.js"></script>
 <script src="src/interface.js"></script>
+<script src="src/stages.js"></script>
 <script src="src/world.js"></script>
 <script src="src/game.js"></script>
 <script src="src/render.js"></script>
+<script src="src/audio.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>

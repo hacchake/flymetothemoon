@@ -54,6 +54,7 @@
       this.rate = new Float32Array(N); // 外からの Poisson 入力 Hz
       this.trace = new Float32Array(N); // 推定発火率 Hz
       this.flash = new Float32Array(N); // 可視化用 0..1
+      this.spikeCount = new Uint16Array(N); // 前回 clearSpikes() からの発火数（描画と音楽が読む）
       this.popOf = new Int32Array(N);
       this.pops.forEach((p, k) => this.popOf.fill(k, p.offset, p.offset + p.n));
 
@@ -149,13 +150,15 @@
         g[i] *= this.decSyn;
         if (v[i] > P.vTh) {
           v[i] = P.vReset; g[i] = 0; refr[i] = P.tRef;
-          trace[i] += this.traceInc; flash[i] = 1; nSp++;
+          trace[i] += this.traceInc; flash[i] = 1; nSp++; this.spikeCount[i]++;
           for (let k = this.synStart[i], e = this.synStart[i + 1]; k < e; k++) outbox[this.synPost[k]] += this.synW[k];
         }
       }
       this.t++;
       this.spikesLastStep = nSp;
     }
+
+    clearSpikes() { this.spikeCount.fill(0); }
 
     run(ms) {
       const n = Math.round(ms / this.dt);

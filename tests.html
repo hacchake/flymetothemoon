@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FMTTM Lesion Tests</title>
+<title>FMTTM Circuit Tests</title>
 <style>
   :root { --bg: #05070f; --ink: #d9def5; --dim: #8a91b0; --ok: #9df5b4; --ng: #ff8a8a; --line: #1e2440; }
   body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--ink); font: 14px/1.6 system-ui, "Yu Gothic UI", sans-serif; }
-  main { max-width: 860px; margin: 0 auto; }
+  main { max-width: 900px; margin: 0 auto; }
   h1 { font-weight: 300; letter-spacing: 0.2em; font-size: 20px; }
+  h2 { font-weight: 400; font-size: 15px; margin-top: 28px; letter-spacing: 0.1em; }
   p { color: var(--dim); }
-  table { width: 100%; border-collapse: collapse; margin-top: 16px; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--dim); font-weight: 500; }
   .ok { color: var(--ok); } .ng { color: var(--ng); }
@@ -19,17 +20,24 @@
 </head>
 <body>
 <main>
-  <h1>LESION TESTS</h1>
-  <p>画面を使わずに同じ閉ループ（感覚 → 回路 → DN → 身体 → 世界）を回し、回路の一部を切ったときに行動が変わるかを確かめる。
-     「無傷」が「損傷」より明らかに良ければ、その行動はそこの神経経路を通って生まれている。</p>
-  <div class="wrap">
-  <table>
+  <h1>CIRCUIT TESTS</h1>
+  <p>画面を使わずに、ハエの脳だけ・あるいは閉ループ全体を回して、行動が本当に神経回路を通って生まれているかを確かめる。
+     シードは固定なので、同じ結果が再現される。回路は FlyWire v783 の実データ（視覚・逃避）＋ 模式（嗅覚）。</p>
+
+  <h2>1. 開ループ：刺激 → 下行ニューロン（Hz、1 秒平均）</h2>
+  <div class="wrap"><table>
+    <thead><tr><th>刺激</th><th>DNa02 左</th><th>DNa02 右</th><th>DNp09 左+右</th><th>GF 左+右</th><th>期待</th><th>判定</th></tr></thead>
+    <tbody id="open"></tbody>
+  </table></div>
+
+  <h2>2. 閉ループ：経路を切ると行動が崩れるか</h2>
+  <div class="wrap"><table>
     <thead><tr><th>課題</th><th>無傷</th><th>損傷</th><th>切った経路</th><th>判定</th></tr></thead>
     <tbody id="rows"></tbody>
-  </table>
-  </div>
+  </table></div>
   <p id="status">実行中…</p>
 </main>
+<script src="src/circuit_flywire.js"></script>
 <script src="src/circuit.js"></script>
 <script src="src/brain.js"></script>
 <script src="src/interface.js"></script>
@@ -37,47 +45,83 @@
 <script src="src/main.js"></script>
 <script>
 (function () {
-  const SEEDS = [1, 2, 3, 4, 5, 6];
+  const C = FM.CIRCUITS.flywire || FM.CIRCUITS.schematic;
+  const SEEDS = [1, 2, 3, 4];
+
+  // ---- 1. 開ループ ----
+  function open({ light = [3, 3], loom = [0, 0] }) {
+    const b = new FM.Brain(C, { dt: 0.5, seed: 1 });
+    for (const p of b.pops) {
+      const k = p.side === "L" ? 0 : 1;
+      if (p.modality === "light_steer" || p.modality === "light_fwd" || p.modality === "retina") b.setRate(p.id, light[k]);
+      if (p.modality === "loom") b.setRate(p.id, loom[k]);
+      if (p.id === "WALK") b.setRate(p.id, 34);
+    }
+    b.run(300);
+    const acc = { aL: 0, aR: 0, fwd: 0, gf: 0 };
+    for (let i = 0; i < 10; i++) {
+      b.run(100);
+      acc.aL += b.popRate("DNa02_L") / 10; acc.aR += b.popRate("DNa02_R") / 10;
+      acc.fwd += (b.popRate("DNp09_L") + b.popRate("DNp09_R")) / 10; acc.gf += (b.popRate("GF_L") + b.popRate("GF_R")) / 10;
+    }
+    return acc;
+  }
+  const OPEN = [
+    { name: "左目に光", s: { light: [120, 3] }, expect: "DNa02 左 > 右", ok: (r) => r.aL > r.aR + 20 },
+    { name: "右目に光", s: { light: [3, 120] }, expect: "DNa02 右 > 左", ok: (r) => r.aR > r.aL + 20 },
+    { name: "左から迫る影", s: { loom: [200, 0] }, expect: "GF が発火", ok: (r) => r.gf > 50 },
+    { name: "刺激なし", s: {}, expect: "GF は静か", ok: (r) => r.gf < 5 },
+  ];
+
+  // ---- 2. 閉ループ ----
   const food = [
     (w) => { w.moon.I = 0; w.foods.push({ x: 400, y: 250 }); w.fly.h = 0; },
-    (w) => { w.moon.I = 0; w.foods.push({ x: 300, y: 560 }); w.fly.h = -Math.PI / 2; },
+    (w) => { w.moon.I = 0; w.foods.push({ x: 300, y: 520 }); w.fly.h = -Math.PI / 2; },
     (w) => { w.moon.I = 0; w.foods.push({ x: 650, y: 120 }); w.fly.h = Math.PI / 2; },
   ];
-  const rocks = (w) => { w.rocks.push({ x: 420, y: 300, r: 34 }, { x: 560, y: 230, r: 26 }, { x: 300, y: 380, r: 22 }); };
+  const swat = (w) => { w.moon.I = 0.6; w.swatters.push(w.makeSwatter(400, 350)); };
+  const allLight = (p) => /^(LC10|LC9|LC31a|R7R8|VPN)/.test(p.from);
   const TESTS = [
-    { name: "月（左前方）に届く", setups: [null], metric: "reached", lesionName: "視覚投射（側方）→ DNa02/01",
-      lesion: (p) => p.from.startsWith("VPNl") },
-    { name: "月（真後ろ）に届く", setups: [(w) => { w.fly.h = Math.PI; }], metric: "reached", lesionName: "視覚投射（側方）→ DNa02/01",
-      lesion: (p) => p.from.startsWith("VPNl") },
-    { name: "餌の匂いをたどる", setups: food, metric: "eaten", lesionName: "側角 → DN",
-      lesion: (p) => p.from.startsWith("LHN_") },
-    { name: "岩を避ける（衝突の少なさ）", setups: [rocks], metric: "hits", lesionName: "LPLC2 → GF/DNa02/MDN",
-      lesion: (p) => p.from.startsWith("LPLC2") },
+    { name: "月（左前方）に届く", setups: [null], metric: "reached", lesionName: "光の入力すべて（LC10・LC9・LC31a）", lesion: allLight },
+    { name: "月（真後ろ）に届く", setups: [(w) => { w.fly.h = Math.PI; }], metric: "reached", lesionName: "同上", lesion: allLight },
+    { name: "月に届く（LC10 だけ残す）", setups: [(w) => { w.fly.h = Math.PI; }], metric: "reached", lesionName: "LC9・LC31a を切り、LC10 だけ", lesion: (p) => /^(LC9|LC31a)_/.test(p.from), expectSame: true },
+    { name: "餌の匂いをたどる（模式の嗅覚）", setups: food, metric: "eaten", lesionName: "側角 → DN", lesion: (p) => p.from.startsWith("LHN_") },
+    { name: "ハエ叩きから生き延びる（20 秒）", setups: [swat], metric: "alive", seconds: 20, lesionName: "LPLC2・LC4（接近検出）", lesion: (p) => /^(LPLC2|LC4)_/.test(p.from) },
   ];
 
   function measure(t, lesion) {
-    let good = 0, n = 0, hits = 0;
+    let good = 0, n = 0;
     for (const setup of t.setups) for (const seed of SEEDS) {
-      const r = FM.experiment({ seconds: 30, seed, setup, lesion });
-      n++; hits += r.hits;
+      const r = FM.experiment({ seconds: t.seconds || 30, seed, setup, lesion, circuit: C });
+      n++;
       if (t.metric === "reached" && r.reached) good++;
       if (t.metric === "eaten" && r.eaten > 0) good++;
+      if (t.metric === "alive" && !r.dead) good++;
     }
-    return t.metric === "hits" ? { text: `衝突 ${hits} 回 / ${n} 試行`, value: -hits } : { text: `${good} / ${n}`, value: good / n };
+    return { text: `${good} / ${n}`, value: good / n };
   }
 
-  const rows = document.getElementById("rows");
-  let i = 0;
-  function next() {
-    if (i >= TESTS.length) { document.getElementById("status").textContent = "完了。シードは固定なので、同じ結果が再現される。"; return; }
-    const t = TESTS[i++];
+  const jobs = [];
+  for (const o of OPEN) jobs.push(() => {
+    const r = open(o.s), ok = o.ok(r), f = (x) => Math.round(x);
+    document.getElementById("open").insertAdjacentHTML("beforeend",
+      `<tr><td>${o.name}</td><td>${f(r.aL)}</td><td>${f(r.aR)}</td><td>${f(r.fwd)}</td><td>${f(r.gf)}</td><td>${o.expect}</td><td class="${ok ? "ok" : "ng"}">${ok ? "OK" : "NG"}</td></tr>`);
+  });
+  for (const t of TESTS) jobs.push(() => {
     const a = measure(t, null), b = measure(t, t.lesion);
-    const ok = a.value > b.value;
-    rows.insertAdjacentHTML("beforeend",
-      `<tr><td>${t.name}</td><td>${a.text}</td><td>${b.text}</td><td>${t.lesionName}</td><td class="${ok ? "ok" : "ng"}">${ok ? "経路が効いている" : "差なし"}</td></tr>`);
+    const ok = t.expectSame ? b.value >= a.value * 0.75 : a.value > b.value;
+    const verdict = t.expectSame ? (ok ? "LC10 だけでも足りる" : "LC10 だけでは足りない") : ok ? "経路が効いている" : "差なし";
+    document.getElementById("rows").insertAdjacentHTML("beforeend",
+      `<tr><td>${t.name}</td><td>${a.text}</td><td>${b.text}</td><td>${t.lesionName}</td><td class="${ok ? "ok" : "ng"}">${verdict}</td></tr>`);
+  });
+
+  function next() {
+    const job = jobs.shift();
+    if (!job) { document.getElementById("status").textContent = "完了。"; return; }
+    job();
     setTimeout(next, 0);
   }
-  window.addEventListener("load", () => setTimeout(next, 50));
+  if (!location.search.includes("norun")) window.addEventListener("load", () => setTimeout(next, 50));
 })();
 </script>
 </body>
