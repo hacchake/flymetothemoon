@@ -134,9 +134,14 @@
     }
 
     play(stage) {
-      this.jazz.start();
       this.load(stage);
       this.showScreen("play");
+      this.startSound();
+    }
+
+    // 音が鳴らせない環境でも、ゲームは止めない
+    startSound() {
+      try { this.jazz.start(); } catch (e) { console.warn("音を開始できませんでした", e); }
     }
 
     // ---------------- 入力 ----------------
@@ -159,7 +164,7 @@
       cv.addEventListener("pointerleave", () => { this.pointer.in = false; this.pointer.down = false; });
       cv.addEventListener("contextmenu", (e) => e.preventDefault());
 
-      $("btn-start").addEventListener("click", () => { this.jazz.start(); this.showScreen("select"); });
+      $("btn-start").addEventListener("click", () => { this.showScreen("select"); this.startSound(); });
       $("btn-sandbox").addEventListener("click", () => this.play(FM.SANDBOX));
       $("btn-back").addEventListener("click", () => this.showScreen("title"));
       $("btn-menu").addEventListener("click", () => this.showScreen("select"));
@@ -183,7 +188,7 @@
     }
 
     toggleSound() {
-      if (!this.jazz.ctx) { this.jazz.start(); $("btn-sound").classList.add("on"); return; }
+      if (!this.jazz.ctx) { this.startSound(); $("btn-sound").classList.add("on"); return; }
       const muted = this.jazz.toggleMute();
       $("btn-sound").classList.toggle("on", !muted);
     }
@@ -242,7 +247,12 @@
     newFly(resetWorld = true) {
       if (resetWorld) this.world.resetFly();
       this.brain.reset();
-      this.motor.gfCool = 0;
+      // 目を開けた瞬間に光の入力が一斉に入ると、同期した発火が GF まで届いて突進してしまう。
+      // 身体は動かさずに 0.3 秒ぶん脳だけ先に回して慣らし、最初の 1 秒は逃避の突進を抑える
+      this.senses.sample(this.world);
+      this.senses.apply(this.brain, { hunger: this.game ? this.game.hunger : 0.5 });
+      this.brain.run(300);
+      this.motor.gfCool = 1.0;
     }
 
     camTarget() {
@@ -396,7 +406,24 @@
     return { startDist: Math.round(startDist), minDist: Math.round(minDist), finalDist: Math.round(world.distToMoon()), reached, eaten, hits, dead: world.fly.state === "dead" };
   };
 
+  // 動かなくなったとき、理由が画面に出るようにする（黙って止まらない）
+  function showError(msg) {
+    let box = document.getElementById("fatal");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "fatal";
+      box.style.cssText = "position:fixed;left:12px;right:12px;bottom:12px;z-index:100;padding:12px 14px;border-radius:10px;" +
+        "background:rgba(60,10,20,0.92);color:#ffd9d9;font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;max-height:40vh;overflow:auto";
+      document.body.appendChild(box);
+    }
+    box.textContent += (box.textContent ? "\n" : "エラーが起きました。この文字を送ってもらえれば直せます：\n") + msg;
+  }
+  window.addEventListener("error", (e) => showError(`${e.message}\n  at ${(e.filename || "").split("/").pop()}:${e.lineno}`));
+  window.addEventListener("unhandledrejection", (e) => showError(String(e.reason)));
+
   window.addEventListener("DOMContentLoaded", () => {
-    if (document.getElementById("world")) FM.app = new App();
+    if (!document.getElementById("world")) return;
+    if (!FM.CIRCUITS || !FM.Brain || !FM.World) { showError("スクリプトの読み込みに失敗しました（src フォルダが index.html と同じ場所にあるか確認してください）"); return; }
+    try { FM.app = new App(); } catch (e) { showError(e.stack || String(e)); }
   });
 })();
