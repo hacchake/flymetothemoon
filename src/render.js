@@ -750,7 +750,7 @@
       const canBlur = "filter" in bctx;
       // ラベル：集団ごとに重心へ置く。FlyWire の中間層は 3 個以上のものを常に、それ以外は強く反応したときだけ出す
       const isFW = B.circuit.meta.name === "flywire";
-      this.lfont = "9px ui-monospace, Menlo, Consolas, monospace";
+      this.lfont = "600 11px ui-monospace, Menlo, Consolas, monospace";
       const u = this.uctx; u.font = this.lfont;
       const labels = B.pops.map((p) => {
         let sx = 0, sy = 0, X = 0, Y = 0, Z = 0;
@@ -1065,20 +1065,22 @@
           ax = q.x; ay = q.y; fade = this.fade(q.w);
           if (fade < 0.45 && lb.prio > 1 && sp < 0.3) continue; // 奥の中間層のラベルは省く
         }
-        u.globalAlpha = fade;
-        const x = ax + 5, y = ay, bx = x - 2, by = y - 6, bw = lb.tw + 4, bh = 12;
+        u.globalAlpha = 0.55 + 0.45 * fade; // 奥のラベルも読める明るさを残す
+        const x = ax + 6, y = ay, bx = x - 3, by = y - 8, bw = lb.tw + 6, bh = 16;
         let hit = false;
         for (const q of placed) if (bx < q[0] + q[2] && bx + bw > q[0] && by < q[1] + q[3] && by + bh > q[1]) { hit = true; break; }
         if (hit) continue;
         placed.push([bx, by, bw, bh]);
         const g = Math.max(lb.glow * 0.8, sp * (0.4 + 0.6 * level));
-        u.fillStyle = rgba(lb.color, 0.35 + 0.65 * level); u.fillRect(ax - 1.5, ay - 1.5, 3, 3);
+        u.fillStyle = rgba(lb.color, 0.55 + 0.45 * level); u.fillRect(ax - 2, ay - 2, 4, 4);
+        // 光の雲の上でも読めるように、文字の後ろに暗い縁どり
+        u.lineJoin = "round"; u.lineWidth = 3.5; u.strokeStyle = "rgba(4,6,16,0.85)"; u.strokeText(lb.text, x, y);
         if (g > 0.25) {
           u.strokeStyle = `rgba(255,215,140,${g * 0.7})`; u.lineWidth = 1; u.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
           u.shadowColor = "rgba(255,220,160,0.8)"; u.shadowBlur = 6 * g;
           u.fillStyle = `rgba(255,${240 - 25 * g},${205 - 50 * g},${0.5 + 0.5 * g})`;
         } else {
-          u.fillStyle = lb.p.source === "game" ? `rgba(255,150,190,${0.35 + 0.5 * level})` : INK(0.28 + 0.6 * level);
+          u.fillStyle = lb.p.source === "game" ? `rgba(255,160,200,${0.7 + 0.3 * level})` : INK(0.68 + 0.32 * level);
         }
         u.fillText(lb.text, x, y);
         u.shadowBlur = 0;
