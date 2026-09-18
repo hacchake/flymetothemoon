@@ -52,6 +52,11 @@
         if (this.wait <= 0) {
           if (this.lost >= this.lives) { this.state = "over"; return "over"; }
           this.state = "play"; this.energy = 100;
+          // 次のハエには、道具（ランタンの電池・餌・雲…）を最初の数まで補充する。
+          // 補充しないと、1 匹目で使い切ったらもうクリアできなくなる
+          this.tools = Object.assign({}, this.stage.tools || {});
+          this.battery = this.tools.lamp || 0;
+          if (!this.demo) this.say("道具が補充された", "good", 1.8);
           return "respawn";
         }
         return null;
