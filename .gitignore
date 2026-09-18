@@ -1,0 +1,5 @@
+# FlyWire 由来の生データ（CC BY-NC 4.0、大きいので配布しない）
+data/
+# Phase 3 のデータ抽出用の Python 環境
+.venv/
+__pycache__/
