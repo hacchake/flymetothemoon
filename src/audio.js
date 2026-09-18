@@ -255,10 +255,13 @@
         env(og, 0.5, 0.001, 0.12); o.connect(og); og.connect(out); o.start(0);
       });
       K.brush = await render(0.4, (oc, out) => { const n = noise(oc, 0.4), f = filt(oc, "bandpass", 2800, 0.5), g = oc.createGain(); env(g, 0.5, 0.03, 0.3); n.connect(f); f.connect(g); g.connect(out); n.start(0); });
-      K.rim = await render(0.1, (oc, out) => {
-        const o = oc.createOscillator(), g = oc.createGain(), f = filt(oc, "bandpass", 1700, 5); o.type = "triangle"; o.frequency.value = 1650;
-        env(g, 0.9, 0.0005, 0.045); o.connect(f); f.connect(g); g.connect(out); o.start(0);
-        const n = noise(oc, 0.03), ng = oc.createGain(); env(ng, 0.3, 0.0005, 0.02); n.connect(ng); ng.connect(out); n.start(0);
+      // クロススティック：木の軽い「コッ」。高く鋭い音にしない（耳に刺さり、割れて聞こえる）
+      K.rim = await render(0.12, (oc, out) => {
+        for (const [fr, a] of [[820, 0.7], [520, 0.45]]) {
+          const o = oc.createOscillator(), g = oc.createGain(); o.type = "sine"; o.frequency.value = fr;
+          env(g, a, 0.0015, 0.05); o.connect(g); g.connect(out); o.start(0);
+        }
+        const n = noise(oc, 0.03), nf = filt(oc, "bandpass", 1800, 1.2), ng = oc.createGain(); env(ng, 0.12, 0.001, 0.012); n.connect(nf); nf.connect(ng); ng.connect(out); n.start(0);
       });
       K.shaker = await render(0.14, (oc, out) => { const n = noise(oc, 0.14), f = filt(oc, "highpass", 6500), g = oc.createGain(); env(g, 0.5, 0.02, 0.08); n.connect(f); f.connect(g); g.connect(out); n.start(0); });
       K.tom = await render(0.5, (oc, out) => {
@@ -273,7 +276,7 @@
         n.connect(f); f.connect(g); g.connect(out); n.start(0);
       });
       // 楽器ごとの大きさにそろえる（ピーク）。シンバルは高い音なので、小さくても耳に刺さる
-      const LEVEL = { kick: 0.8, tom: 0.38, snare: 0.4, clap: 0.4, rim: 0.4, brush: 0.35, crash: 0.32, ride: 0.3, hat: 0.3, pedal: 0.25, shaker: 0.25 };
+      const LEVEL = { kick: 0.8, tom: 0.38, snare: 0.4, clap: 0.4, rim: 0.3, brush: 0.35, crash: 0.32, ride: 0.3, hat: 0.3, pedal: 0.25, shaker: 0.25 };
       for (const [name, peak] of Object.entries(LEVEL)) {
         const d = K[name].getChannelData(0);
         let m = 0; for (let i = 0; i < d.length; i++) m = Math.max(m, Math.abs(d[i]));
@@ -441,7 +444,7 @@
         if (bi === 3) this.upright(fitBass(nRoot - 12), t + e, beat * 0.9, 0.8);
         for (let k = 0; k < 2; k++) this.drum("shaker", t + k * e, (k ? 0.55 : 0.3) * drive, 0.35);
         const slot = (this.bar % 2) * 8 + bi * 2;
-        for (let k = 0; k < 2; k++) if ([0, 3, 6, 10, 12].includes(slot + k)) this.drum("rim", t + k * e, 0.35, -0.25);
+        for (let k = 0; k < 2; k++) if ([0, 3, 6, 10, 12].includes(slot + k)) this.drum("rim", t + k * e, (0.22 + 0.08 * d) * (0.85 + Math.random() * 0.3), -0.3);
         if (bi === 0 || bi === 2) this.drum("kick", t, 0.35);
         const comp = this.bar % 2 ? [1, 3, 6] : [0, 3, 5];
         for (let k = 0; k < 2; k++) if (comp.includes(bi * 2 + k)) this.pluckChord(this.voicing(root, q), t + k * e + hum(), (0.03 + 0.025 * d) * (k ? 0.8 : 1));
@@ -574,8 +577,11 @@
         o.type = "triangle"; o.frequency.value = mtof(n);
         f.type = "lowpass"; f.frequency.setValueAtTime(2000, t); f.frequency.exponentialRampToValueAtTime(700, t + 0.15);
         o.connect(f); f.connect(g); g.connect(this.tone); g.connect(this.verbSend);
-        this.env(g, t + i * 0.014, v, 0.003, 0.4);
-        o.start(t); o.stop(t + 0.6);
+        // 音の頭は、エンベロープが始まる時刻にそろえる（そろえないと、始まるまでの間、音量 1 のまま鳴ってしまう）
+        const ts = t + i * 0.014;
+        g.gain.value = 0;
+        this.env(g, ts, v, 0.003, 0.4);
+        o.start(ts); o.stop(ts + 0.6);
       });
     }
     vibes(m, t, v, pan, pri = 0) {
