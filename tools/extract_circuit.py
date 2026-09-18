@@ -148,16 +148,16 @@ def main():
     print("top intermediate types:", info[info.role == "inter"].ct.value_counts().head(15).to_dict())
     print(f"file: {len(js) / 1e6:.2f} MB")
 
-    # 背景に描く全脳の点群（12000 点を間引いて）。[x2d, y2d, 種類, X, Y, Z]
+    # 背景に描く全脳の点群（40000 点を間引いて）。[x2d, y2d, 種類, X, Y, Z]
     rng = np.random.default_rng(0)
     allp = ann[["pos_x", "pos_y", "pos_z", "super_class"]].dropna()
-    s = allp.iloc[rng.choice(len(allp), 12000, replace=False)]
+    s = allp.iloc[rng.choice(len(allp), 40000, replace=False)]
     cls = {"optic": 0, "central": 1, "visual_projection": 2, "sensory": 3, "descending": 4}
     AX, AY, AZ = to3d(s.pos_x.to_numpy(), s.pos_y.to_numpy(), s.pos_z.to_numpy())
-    atlas = [[round((x - x0) / (x1 - x0), 4), round((y - y0) / (y1 - y0), 4), cls.get(c, 5), round(float(a), 3), round(float(b), 3), round(float(d), 3)]
+    atlas = [[round((x - x0) / (x1 - x0), 3), round((y - y0) / (y1 - y0), 3), cls.get(c, 5), round(float(a), 3), round(float(b), 3), round(float(d), 3)]
              for x, y, c, a, b, d in zip(s.pos_x, s.pos_y, s.super_class, AX, AY, AZ)]
     (ROOT / "src" / "brain_atlas.js").write_text(
-        "// 自動生成：tools/extract_circuit.py。FlyWire FAFB v783 のニューロン位置を 12000 点に間引いたもの。CC BY-NC 4.0。\n"
+        "// 自動生成：tools/extract_circuit.py。FlyWire FAFB v783 のニューロン位置を 40000 点に間引いたもの。CC BY-NC 4.0。\n"
         "window.FM = window.FM || {};\nwindow.FM.ATLAS = " + json.dumps(atlas, separators=(",", ":")) + ";\n", encoding="utf-8")
 
 

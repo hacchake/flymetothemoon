@@ -238,9 +238,9 @@
       ]);
       K.kick = await render(0.55, (oc, out) => {
         const o = oc.createOscillator(), g = oc.createGain();
-        o.frequency.setValueAtTime(150, 0); o.frequency.exponentialRampToValueAtTime(44, 0.16);
+        o.frequency.setValueAtTime(118, 0); o.frequency.exponentialRampToValueAtTime(42, 0.16);
         env(g, 1, 0.002, 0.45); o.connect(g); g.connect(out); o.start(0);
-        const n = noise(oc, 0.02), f = filt(oc, "lowpass", 3000), ng = oc.createGain(); ng.gain.value = 0.3; n.connect(f); f.connect(ng); ng.connect(out); n.start(0);
+        const n = noise(oc, 0.02), f = filt(oc, "lowpass", 3000), ng = oc.createGain(); ng.gain.value = 0.1; n.connect(f); f.connect(ng); ng.connect(out); n.start(0);
       });
       K.snare = await render(0.35, (oc, out) => {
         const n = noise(oc, 0.35), f = filt(oc, "bandpass", 1900, 0.8), g = oc.createGain(); env(g, 0.8, 0.001, 0.2); n.connect(f); f.connect(g); g.connect(out); n.start(0);
@@ -265,6 +265,13 @@
         g.gain.exponentialRampToValueAtTime(0.0001, 0.25);
         n.connect(f); f.connect(g); g.connect(out); n.start(0);
       });
+      // 楽器ごとの大きさにそろえる（ピーク）。シンバルは高い音なので、小さくても耳に刺さる
+      const LEVEL = { kick: 0.8, tom: 0.6, snare: 0.5, clap: 0.4, rim: 0.4, brush: 0.35, crash: 0.32, ride: 0.3, hat: 0.3, pedal: 0.25, shaker: 0.25 };
+      for (const [name, peak] of Object.entries(LEVEL)) {
+        const d = K[name].getChannelData(0);
+        let m = 0; for (let i = 0; i < d.length; i++) m = Math.max(m, Math.abs(d[i]));
+        if (m > 0) { const f = peak / m; for (let i = 0; i < d.length; i++) d[i] *= f; }
+      }
       this.kit = K;
     }
 
@@ -376,7 +383,7 @@
       const hum = () => (Math.random() - 0.5) * 0.012;
 
       // 8 小節ごとの区切り：頭にクラッシュ、終わりにフィル
-      if (phraseStart && (this.bar > 0 || this.chorus > 0)) this.drum("crash", t, 0.28 * soft, 0.3);
+      if (phraseStart && (this.bar > 0 || this.chorus > 0)) this.drum("crash", t, 0.4 * soft, 0.3);
       if (phraseEnd && bi >= S.meter - 2 && S.feel !== "ballad") this.fill(t, beat, bi, S);
 
       if (S.feel === "swing") {
@@ -454,7 +461,7 @@
         }
       }
       // 危ないとき：低い鼓動
-      if (this.tension > 0.55 && bi % 2 === 0) { this.drum("kick", t, 0.6 * this.tension); this.drum("kick", t + beat * 0.3, 0.35 * this.tension); }
+      if (this.tension > 0.55 && bi % 2 === 0) { this.drum("kick", t, 0.4 * this.tension); this.drum("kick", t + beat * 0.3, 0.22 * this.tension); }
     }
 
     // ドラムのフィル（区切りの小節の最後の 2 拍）
@@ -620,7 +627,7 @@
     crash() {
       if (!this.ctx) return;
       const t = this.ctx.currentTime;
-      this.drum("crash", t, 0.5, -0.3);
+      this.drum("crash", t, 0.6, -0.3);
       this.fb.gain.cancelScheduledValues(t);
       this.fb.gain.setValueAtTime(0.7, t);
       this.fb.gain.setTargetAtTime(0.35, t + 0.8, 0.6);
@@ -654,7 +661,7 @@
         o.type = "sine"; o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(1800, t + 1.4);
         o.connect(g); g.connect(this.tone); g.connect(this.delaySend); this.env(g, t, 0.08, 0.2, 1.3); o.start(t); o.stop(t + 1.6);
       }
-      if (type === "slam") { this.drum("kick", t, 1.0); this.drum("snare", t, 0.7); }
+      if (type === "slam") { this.drum("kick", t, 0.8); this.drum("snare", t, 0.6); }
       if (type === "zap") this.noiseHit(t, "bandpass", 3000, 4, 0.2, 0.4);
       if (type === "stuck") this.drum("tom", t, 0.5, 0, 0.7);
       if (type === "tongue") this.drum("rim", t, 0.6, 0, 0.6);

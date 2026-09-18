@@ -781,7 +781,7 @@
         else { ap[i * 3] = (e[0] - 0.5) * 2; ap[i * 3 + 1] = -(e[1] - 0.5) * 2 * 0.48; ap[i * 3 + 2] = 0; }
         const c = ATLAS_COLOR[e[2]] || ATLAS_COLOR[5];
         ac[i * 3] = c[0] / 255; ac[i * 3 + 1] = c[1] / 255; ac[i * 3 + 2] = c[2] / 255;
-        asa[i * 2] = 0.045; asa[i * 2 + 1] = 0.085; // 全脳の雲：大きく、淡く
+        asa[i * 2] = 0.022; asa[i * 2 + 1] = 0.11; // 全脳の雲：4 万点を細かく
       });
       const nc = new Float32Array(col.length * 3);
       col.forEach((c, i) => { nc[i * 3] = c[0] / 255; nc[i * 3 + 1] = c[1] / 255; nc[i * 3 + 2] = c[2] / 255; });
@@ -820,8 +820,8 @@
       for (let i = 0; i < B.N; i++) {
         const tr = B.trace[i], fl = B.flash[i];
         // 中心部は何百個も重なるので、1 個ずつは控えめに（重なって初めて明るくなる）
-        sa[i * 2] = 0.026 * size[i] * (1 + Math.min(1.8, tr / 70) + fl * 1.0);
-        sa[i * 2 + 1] = 0.07 + Math.min(0.38, tr / 280) + fl * 0.2;
+        sa[i * 2] = 0.017 * size[i] * (1 + Math.min(1.8, tr / 70) + fl * 1.0);
+        sa[i * 2 + 1] = 0.09 + Math.min(0.45, tr / 250) + fl * 0.25;
       }
       // 光の粒：頭と、3 つの尾
       const cd = this.comet3;
@@ -836,7 +836,7 @@
           const o = m * 8;
           cd[o] = p3[i3] + dx * u; cd[o + 1] = p3[i3 + 1] + dy * u + arc; cd[o + 2] = p3[i3 + 2] + dz * u;
           if (c.inh) { cd[o + 3] = 0.35; cd[o + 4] = 0.65; cd[o + 5] = 1.0; } else { cd[o + 3] = 1.0; cd[o + 4] = 0.75; cd[o + 5] = 0.5; }
-          cd[o + 6] = k ? 0.026 : 0.04; cd[o + 7] = (k ? 0.5 - k * 0.12 : 0.95) * Math.sin(Math.max(0.05, c.t) * Math.PI);
+          cd[o + 6] = k ? 0.016 : 0.026; cd[o + 7] = (k ? 0.5 - k * 0.12 : 0.95) * Math.sin(Math.max(0.05, c.t) * Math.PI);
           m++;
         }
       }
