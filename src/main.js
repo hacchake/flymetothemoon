@@ -70,7 +70,7 @@
       this.customs = load(CUSTOM_KEY, []);
       this.circuitName = FM.CIRCUITS.flywire ? "flywire" : "schematic";
       this.worldView = new FM.WorldView($("world"));
-      this.brainView = new FM.BrainView($("brain-fx"), $("brain-ui"));
+      this.brainView = new FM.BrainView($("brain-fx"), $("brain-ui"), $("brain-gl"));
       this.jazz = new FM.Jazz();
       this.cam = { s: 1, x: 0, y: 0 };
       this.screen = "title";

@@ -326,18 +326,24 @@
 
     drawMoon(m, t) {
       const { ctx } = this;
-      for (const [k, a] of [[9, 0.08], [5, 0.16], [2.6, 0.3]]) {
-        const g = ctx.createRadialGradient(m.x, m.y, m.r * 0.8, m.x, m.y, m.r * k);
-        g.addColorStop(0, `rgba(255,240,205,${a})`); g.addColorStop(1, "rgba(255,240,205,0)");
+      // 暈：暖かい光の広がりと、外側のうっすら青い輪
+      for (const [k, a] of [[10, 0.05], [5.5, 0.1], [2.8, 0.22], [1.6, 0.35]]) {
+        const g = ctx.createRadialGradient(m.x, m.y, m.r * 0.95, m.x, m.y, m.r * k);
+        g.addColorStop(0, `rgba(255,244,222,${a})`); g.addColorStop(1, "rgba(255,244,222,0)");
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m.x, m.y, m.r * k, 0, TAU); ctx.fill();
       }
-      const disc = ctx.createRadialGradient(m.x - m.r * 0.35, m.y - m.r * 0.35, 2, m.x, m.y, m.r);
-      disc.addColorStop(0, "#fffcf2"); disc.addColorStop(0.7, "#f1e6c6"); disc.addColorStop(1, "#d8c89c");
-      ctx.fillStyle = disc; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill();
-      ctx.fillStyle = "rgba(160,145,110,0.3)";
-      for (const [dx, dy, rr] of [[-0.3, 0.1, 0.22], [0.25, -0.25, 0.15], [0.2, 0.35, 0.12], [-0.1, -0.45, 0.08]]) {
-        ctx.beginPath(); ctx.arc(m.x + dx * m.r, m.y + dy * m.r, rr * m.r, 0, TAU); ctx.fill();
-      }
+      const ring = ctx.createRadialGradient(m.x, m.y, m.r * 6.2, m.x, m.y, m.r * 7.4);
+      ring.addColorStop(0, "rgba(170,200,255,0)"); ring.addColorStop(0.5, "rgba(170,200,255,0.035)"); ring.addColorStop(1, "rgba(170,200,255,0)");
+      ctx.fillStyle = ring; ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 7.4, 0, TAU); ctx.fill();
+      // 月面（一度だけ作った画像）
+      const tex = moonTexture();
+      ctx.save();
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.clip();
+      ctx.drawImage(tex, m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
+      ctx.restore();
+      // 縁のかすかな光
+      ctx.strokeStyle = "rgba(255,248,230,0.35)"; ctx.lineWidth = Math.max(0.6, m.r * 0.03);
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.r - ctx.lineWidth / 2, 0, TAU); ctx.stroke();
     }
 
     drawCity(world, t, vis) {
@@ -543,6 +549,71 @@
     }
   }
 
+  // ---- 月面：起動時に一度だけ作る（海・クレーター・光条・ざらつき・周縁減光） ----
+  let MOON_TEX = null;
+  function moonTexture() {
+    if (MOON_TEX) return MOON_TEX;
+    const N = 320, cv = document.createElement("canvas");
+    cv.width = cv.height = N;
+    const g = cv.getContext("2d"), img = g.createImageData(N, N), d = img.data;
+    const rng = FM.mulberry32(1969);
+    // 値ノイズ（なめらかな乱数の場）
+    const G = 64, grid = Array.from({ length: G * G }, () => rng());
+    const vn = (x, y) => {
+      const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+      const at = (i, j) => grid[((j & (G - 1)) * G) + (i & (G - 1))];
+      const s = (v) => v * v * (3 - 2 * v), u = s(xf), w = s(yf);
+      return (at(xi, yi) * (1 - u) + at(xi + 1, yi) * u) * (1 - w) + (at(xi, yi + 1) * (1 - u) + at(xi + 1, yi + 1) * u) * w;
+    };
+    const fbm = (x, y) => { let a = 0, f = 1, amp = 0.5; for (let o = 0; o < 5; o++) { a += amp * vn(x * f, y * f); f *= 2.03; amp *= 0.5; } return a; };
+    // 海（表側の大きな暗い平原。配置は実際の月をおおまかになぞる。-1..1 の座標）
+    const maria = [[-0.28, -0.38, 0.3], [0.1, -0.3, 0.17], [0.25, -0.02, 0.2], [0.47, 0.12, 0.13], [-0.18, 0.36, 0.2],
+      [-0.55, -0.05, 0.34], [0.62, -0.28, 0.1], [0.05, 0.12, 0.12], [-0.42, 0.28, 0.16], [0.3, 0.35, 0.1]];
+    // クレーター（大きいものは少なく、小さいものは多く）
+    const craters = [];
+    for (let i = 0; i < 90; i++) {
+      const r = 0.012 + Math.pow(rng(), 4) * 0.075;
+      craters.push([rng() * 2 - 1, rng() * 2 - 1, r]);
+    }
+    const tycho = [-0.12, 0.66, 0.045], copern = [-0.3, -0.05, 0.05];
+    craters.push(tycho, copern);
+    const L = [-0.55, -0.6]; // 光の来る向き（左上）
+    for (let py = 0; py < N; py++) for (let px = 0; px < N; px++) {
+      const x = (px + 0.5) / N * 2 - 1, y = (py + 0.5) / N * 2 - 1, rr = x * x + y * y;
+      const o = (py * N + px) * 4;
+      if (rr > 1) { d[o + 3] = 0; continue; }
+      let a = 0.84 + (fbm(x * 3 + 7, y * 3 + 3) - 0.5) * 0.22 + (fbm(x * 14, y * 14) - 0.5) * 0.08; // 高地のざらつき
+      let mare = 0;
+      for (const [mx, my, mr] of maria) {
+        const q = Math.hypot(x - mx, y - my) / mr + (fbm(x * 4 + mx * 9, y * 4 + my * 9) - 0.5) * 1.3;
+        mare = Math.max(mare, Math.max(0, Math.min(1, (1.1 - q) * 1.4)));
+      }
+      a = a * (1 - mare * 0.36) + (fbm(x * 9, y * 9) - 0.5) * 0.05;
+      for (const [cx, cy, cr] of craters) {
+        const dx = x - cx, dy = y - cy, q = Math.hypot(dx, dy) / cr;
+        if (q > 1.35) continue;
+        const shade = (dx * L[0] + dy * L[1]) / (cr * q + 1e-6); // 光の側 = +、影の側 = -
+        if (q < 1) a += -0.025 * (1 - q) - 0.035 * shade * q * (1 - q) * 3; // 窪み：光の反対側の内壁が明るい（満月なので控えめ）
+        else a += 0.03 * shade * (1.35 - q) * 3 + 0.02 * (1.35 - q); // 縁：光の側が明るい
+      }
+      // ティコの光条
+      const tx = x - tycho[0], ty = y - tycho[1], tr = Math.hypot(tx, ty);
+      if (tr > 0.05 && tr < 0.9) {
+        const ang = Math.atan2(ty, tx);
+        const ray = Math.pow(Math.max(0, Math.cos(ang * 9 + 0.6)), 60) + Math.pow(Math.max(0, Math.cos(ang * 13 + 2)), 80) * 0.8 + Math.pow(Math.max(0, Math.cos(ang * 5 + 1.3)), 90) * 0.6;
+        a += ray * 0.07 * (1 - tr / 0.9) * (0.6 + fbm(tr * 12, ang * 3));
+      }
+      // 周縁減光と、少し暖かい色
+      const limb = 0.62 + 0.38 * Math.pow(1 - rr, 0.35);
+      a = Math.max(0.12, Math.min(1.08, a)) * limb;
+      d[o] = Math.min(255, 255 * a * 1.0); d[o + 1] = Math.min(255, 255 * a * 0.975); d[o + 2] = Math.min(255, 255 * a * 0.9);
+      d[o + 3] = rr > 0.985 ? Math.round(255 * (1 - (rr - 0.985) / 0.015)) : 255;
+    }
+    g.putImageData(img, 0, 0);
+    MOON_TEX = cv;
+    return cv;
+  }
+
   // ======================================================================
   //  脳（FlyWire の実座標に置いたニューロン。2 枚のキャンバス：残像つきの fx と、毎回消す ui）
   // ======================================================================
@@ -566,10 +637,17 @@
   }
 
   class BrainView {
-    constructor(fxCanvas, uiCanvas) {
+    constructor(fxCanvas, uiCanvas, glCanvas) {
       this.fx = fxCanvas; this.ui = uiCanvas;
       this.fctx = fxCanvas.getContext("2d");
       this.uctx = uiCanvas.getContext("2d");
+      // 立体表示（WebGL）が使えればそれを使う。だめなら従来の 2D 表示
+      this.gl3 = null;
+      if (glCanvas && FM.BrainGL) {
+        try { const g = new FM.BrainGL(glCanvas); if (g.ok) this.gl3 = g; } catch (e) { console.warn("3D 表示を使えません", e); }
+      }
+      if (this.gl3) { fxCanvas.style.display = "none"; this.gl3.attach(uiCanvas.parentElement); }
+      else if (glCanvas) glCanvas.style.display = "none";
       this.comets = [];
       this.rings = [];
       this.flashA = 0;
@@ -588,6 +666,7 @@
       this.fctx.setTransform(this.fxDpr, 0, 0, this.fxDpr, 0, 0);
       this.uctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.w = w; this.h = h; this.dpr = dpr;
+      if (this.gl3) this.gl3.resize(w, h, dpr);
       this.layout = null;
     }
 
@@ -595,12 +674,13 @@
     frame() {
       const wide = this.w >= 900;
       const sideW = wide ? Math.max(210, Math.min(270, this.w * 0.2)) : 0;
-      const top = 38, bottom = wide ? 46 : 96;
-      const eyeW = this.w < 600 ? 0 : Math.min(80, this.w * 0.07);
-      const x0 = sideW + eyeW + 6, x1 = this.w - sideW - eyeW - 6;
+      const top = 30, bottom = wide ? 42 : 96;
+      const eyeW = this.w < 600 ? 0 : Math.min(60, this.w * 0.05);
+      const x0 = sideW + eyeW + 4, x1 = this.w - sideW - eyeW - 4;
       const aw = Math.max(50, x1 - x0), ah = Math.max(40, this.h - top - bottom);
       const aspect = 2.08; // FlyWire の脳の横:縦
-      const bw = Math.min(aw, ah * aspect), bh = bw / aspect;
+      // 余白を減らすため、横は 1.8 倍、縦は 1.3 倍まで引き伸ばしてよい（形より大きさを優先）
+      const bw = Math.min(aw, ah * aspect * 1.8), bh = Math.min(ah, (bw / aspect) * 1.3);
       return { x: x0 + (aw - bw) / 2, y: top + (ah - bh) / 2, w: bw, h: bh, eyeW, sideW, top, bottom, wide };
     }
 
@@ -627,8 +707,21 @@
           size[k] = p.role === "dn" ? 2.6 : p.role === "sensor" ? 0.8 : 1;
         }
       }
-      // 背景：全脳（6000 点）と、この回路の静かなニューロンを一度だけ描いておく
+      // 立体の位置（FlyWire の実座標。無い集団は平面の位置から作る）
+      const p3 = new Float32Array(B.N * 3);
+      const rng3 = FM.mulberry32(9);
+      for (const p of B.pops) for (let i = 0; i < p.n; i++) {
+        const k = p.offset + i;
+        if (p.pos3) { p3[k * 3] = p.pos3[i][0]; p3[k * 3 + 1] = p.pos3[i][1]; p3[k * 3 + 2] = p.pos3[i][2]; }
+        else {
+          const x = (pos[k * 2] - F.x) / F.w, y = (pos[k * 2 + 1] - F.y) / F.h;
+          p3[k * 3] = (x - 0.5) * 2; p3[k * 3 + 1] = -(y - 0.5) * 2 * 0.48; p3[k * 3 + 2] = (rng3() - 0.5) * 0.12;
+        }
+      }
+      if (this.gl3) this.upload3D(p3, col, size);
+      // 背景：全脳（6000 点）と、この回路の静かなニューロンを一度だけ描いておく（2D 表示のとき）
       const atlas = document.createElement("canvas");
+      if (this.gl3) { atlas.width = atlas.height = 1; } else {
       atlas.width = Math.round(this.w * this.fxDpr); atlas.height = Math.round(this.h * this.fxDpr);
       const a = atlas.getContext("2d");
       a.setTransform(this.fxDpr, 0, 0, this.fxDpr, 0, 0);
@@ -640,11 +733,12 @@
         a.fillStyle = rgba(col[i], 0.3);
         a.fillRect(pos[i * 2], pos[i * 2 + 1], 1.2 * size[i], 1.2 * size[i]);
       }
+      }
       // 光の玉の画像と、DN かどうかは、ニューロンごとに先に決めておく
       const isDN = new Uint8Array(B.N), isGF = new Uint8Array(B.N);
       for (const p of B.pops) if (p.role === "dn") for (let i = 0; i < p.n; i++) { isDN[p.offset + i] = 1; if (p.id.startsWith("GF")) isGF[p.offset + i] = 1; }
       // DN の位置（ラベル用）
-      const dn = B.pops.filter((p) => p.role === "dn").map((p) => ({ p, x: pos[p.offset * 2], y: pos[p.offset * 2 + 1] }));
+      const dn = B.pops.filter((p) => p.role === "dn").map((p) => ({ p, k: p.offset, x: pos[p.offset * 2], y: pos[p.offset * 2 + 1] }));
       // 光のにじみは 1/3 の解像度のキャンバスに点を打ち、拡大して重ねる（1 個ずつ画像を描くより数倍速い）
       const lo = document.createElement("canvas");
       lo.width = Math.ceil(this.w / 3); lo.height = Math.ceil(this.h / 3);
@@ -659,11 +753,14 @@
       this.lfont = "9px ui-monospace, Menlo, Consolas, monospace";
       const u = this.uctx; u.font = this.lfont;
       const labels = B.pops.map((p) => {
-        let sx = 0, sy = 0;
-        for (let i = 0; i < p.n; i++) { sx += pos[(p.offset + i) * 2]; sy += pos[(p.offset + i) * 2 + 1]; }
+        let sx = 0, sy = 0, X = 0, Y = 0, Z = 0;
+        for (let i = 0; i < p.n; i++) {
+          const k = p.offset + i;
+          sx += pos[k * 2]; sy += pos[k * 2 + 1]; X += p3[k * 3]; Y += p3[k * 3 + 1]; Z += p3[k * 3 + 2];
+        }
         const text = labelText(p);
         return {
-          p, x: sx / p.n, y: sy / p.n, text, tw: u.measureText(text).width, color: col[p.offset],
+          p, x: sx / p.n, y: sy / p.n, X: X / p.n, Y: Y / p.n, Z: Z / p.n, text, tw: u.measureText(text).width, color: col[p.offset],
           fixed: !isFW || p.role !== "inter" || p.source !== "flywire" || p.n >= 3,
           prio: p.role === "dn" ? 0 : p.role === "sensor" ? 1 : p.source !== "flywire" ? 2 : 3,
           avg: -1, glow: 0, show: 0,
@@ -672,7 +769,94 @@
       // 計器用：感覚の種類 × 左右 → 集団
       const mods = {};
       for (const p of B.pops) if (p.modality) (mods[p.modality + p.side] ||= []).push(p);
-      this.layout = { pos, col, size, atlas, F, dn, isDN, isGF, lo, lctx: lo.getContext("2d"), colStr, blur, bctx, canBlur, labels, mods };
+      this.layout = { pos, p3, col, size, atlas, F, dn, isDN, isGF, lo, lctx: lo.getContext("2d"), colStr, blur, bctx, canBlur, labels, mods };
+    }
+
+    // GPU に、全脳の背景とニューロンの位置・色を置く
+    upload3D(p3, col, size) {
+      const A = FM.ATLAS || [], n = A.length;
+      const ap = new Float32Array(n * 3), ac = new Float32Array(n * 3), asa = new Float32Array(n * 2);
+      A.forEach((e, i) => {
+        if (e.length >= 6) { ap[i * 3] = e[3]; ap[i * 3 + 1] = e[4]; ap[i * 3 + 2] = e[5]; }
+        else { ap[i * 3] = (e[0] - 0.5) * 2; ap[i * 3 + 1] = -(e[1] - 0.5) * 2 * 0.48; ap[i * 3 + 2] = 0; }
+        const c = ATLAS_COLOR[e[2]] || ATLAS_COLOR[5];
+        ac[i * 3] = c[0] / 255; ac[i * 3 + 1] = c[1] / 255; ac[i * 3 + 2] = c[2] / 255;
+        asa[i * 2] = 0.045; asa[i * 2 + 1] = 0.085; // 全脳の雲：大きく、淡く
+      });
+      const nc = new Float32Array(col.length * 3);
+      col.forEach((c, i) => { nc[i * 3] = c[0] / 255; nc[i * 3 + 1] = c[1] / 255; nc[i * 3 + 2] = c[2] / 255; });
+      this.gl3.setData({ atlasPos: ap, atlasCol: ac, atlasSA: asa, neuronPos: p3, neuronCol: nc });
+      this.sa3 = new Float32Array(col.length * 2);
+      this.comet3 = new Float32Array(8 * 3200);
+    }
+
+    // ニューロン k の画面上の位置（立体表示では毎フレーム変わる）
+    screenOf(k) {
+      const L = this.layout;
+      if (!this.gl3) return { x: L.pos[k * 2], y: L.pos[k * 2 + 1], fade: 1 };
+      const q = this.gl3.project(L.p3[k * 3], L.p3[k * 3 + 1], L.p3[k * 3 + 2]);
+      return q && { x: q.x, y: q.y, fade: this.fade(q.w) };
+    }
+    // 奥のものほど薄く
+    fade(w) { return Math.max(0.3, Math.min(1, 1 - (w - this.gl3.refW) * 0.5)); }
+
+    // 立体表示の 1 フレーム：ニューロンの粒の大きさ・明るさと、シナプスを流れる光の粒
+    draw3D(dtFrame) {
+      const B = this.brain, L = this.layout, { p3, size, isDN, isGF } = L;
+      let budget = 700 - this.comets.length;
+      for (let i = 0; i < B.N; i++) {
+        const n = B.spikeCount[i];
+        if (!n) continue;
+        if (isDN[i] && this.rings.length < 60) this.rings.push({ k: i, r: 4, t: 0, gf: isGF[i] === 1 && B.trace[i] > 100 });
+        if (budget <= 0) continue;
+        const s0 = B.synStart[i], s1 = B.synStart[i + 1];
+        if (s1 > s0 && Math.random() < 0.25 * n) {
+          const q = s0 + Math.floor(Math.random() * (s1 - s0));
+          this.comets.push({ i, j: B.synPost[q], t: 0, dur: 0.3 + Math.random() * 0.4, inh: B.synW[q] < 0 });
+          budget--;
+        }
+      }
+      const sa = this.sa3;
+      for (let i = 0; i < B.N; i++) {
+        const tr = B.trace[i], fl = B.flash[i];
+        // 中心部は何百個も重なるので、1 個ずつは控えめに（重なって初めて明るくなる）
+        sa[i * 2] = 0.026 * size[i] * (1 + Math.min(1.8, tr / 70) + fl * 1.0);
+        sa[i * 2 + 1] = 0.07 + Math.min(0.38, tr / 280) + fl * 0.2;
+      }
+      // 光の粒：頭と、3 つの尾
+      const cd = this.comet3;
+      let m = 0;
+      for (const c of this.comets) {
+        const i3 = c.i * 3, j3 = c.j * 3;
+        const dx = p3[j3] - p3[i3], dy = p3[j3 + 1] - p3[i3 + 1], dz = p3[j3 + 2] - p3[i3 + 2];
+        const len = Math.hypot(dx, dy, dz);
+        for (let k = 0; k < 4 && m < 3200; k++) {
+          const u = Math.max(0, Math.min(1, c.t - k * 0.06));
+          const arc = Math.sin(u * Math.PI) * 0.12 * len;
+          const o = m * 8;
+          cd[o] = p3[i3] + dx * u; cd[o + 1] = p3[i3 + 1] + dy * u + arc; cd[o + 2] = p3[i3 + 2] + dz * u;
+          if (c.inh) { cd[o + 3] = 0.35; cd[o + 4] = 0.65; cd[o + 5] = 1.0; } else { cd[o + 3] = 1.0; cd[o + 4] = 0.75; cd[o + 5] = 0.5; }
+          cd[o + 6] = k ? 0.026 : 0.04; cd[o + 7] = (k ? 0.5 - k * 0.12 : 0.95) * Math.sin(Math.max(0.05, c.t) * Math.PI);
+          m++;
+        }
+      }
+      this.gl3.render(L.F, dtFrame, sa, cd, m);
+      for (const c of this.comets) c.t += dtFrame / c.dur;
+      this.comets = this.comets.filter((c) => c.t < 1.18);
+    }
+
+    // 立体表示の DN の波紋と GF の衝撃波（UI キャンバスに、今の画面位置で描く）
+    drawRings3D(u, dt) {
+      for (const g of this.rings) {
+        g.t += dt; g.r += dt * (g.gf ? 900 : 90);
+        const q = this.screenOf(g.k);
+        if (!q) continue;
+        const a = Math.max(0, (g.gf ? 0.9 : 0.6) - g.t * (g.gf ? 0.9 : 1.6)) * q.fade;
+        u.strokeStyle = g.gf ? `rgba(220,170,255,${a})` : `rgba(255,220,150,${a})`;
+        u.lineWidth = g.gf ? 3 : 1.5;
+        u.beginPath(); u.arc(q.x, q.y, g.r, 0, TAU); u.stroke();
+      }
+      this.rings = this.rings.filter((g) => g.t < (g.gf ? 1 : 0.4));
     }
 
     // simDt：このフレームで脳が進んだ時間（0 のこともある）。dtFrame：画面の経過時間（動きの速さに使う）
@@ -691,6 +875,7 @@
       }
       const act = Math.min(1, this.spikesPerSec / 60000);
       this.activity += (act - this.activity) * 0.1;
+      if (this.gl3) { this.draw3D(dtFrame); this.drawUI(senses, motor, t, hud, dtFrame); return; }
 
       // 残像：少しずつ暗くする
       c.globalCompositeOperation = "source-over";
@@ -821,8 +1006,13 @@
       u.fillStyle = INK(0.5);
       u.fillText(`${B.N.toLocaleString()} neurons · ${B.nSyn.toLocaleString()} connections`, F.sideW + 12, 30);
 
+      if (this.gl3) this.drawRings3D(u, dtFrame);
       this.drawDNRings(u);
       this.drawLabels(u, dtFrame);
+      if (this.gl3) {
+        u.font = `9px ${MONO}`; u.textAlign = "right"; u.fillStyle = INK(0.3);
+        u.fillText("ドラッグで回転 ／ ホイールで拡大 ／ ダブルクリックで正面", F.x + F.w - 4, F.y + F.h - 4);
+      }
       this.drawEyes(u, senses);
       if (F.wide) {
         this.drawSensesPanel(u, senses, hud, 8, 8, F.sideW - 12, h - F.bottom - 12);
@@ -843,9 +1033,10 @@
 
     drawDNRings(u) {
       for (const d of this.layout.dn) {
-        const r = this.brain.popRate(d.p.id);
-        u.strokeStyle = `rgba(255,225,150,${0.3 + Math.min(0.6, r / 150)})`; u.lineWidth = 1;
-        u.beginPath(); u.arc(d.x, d.y, 6 + Math.min(10, r / 20), 0, TAU); u.stroke();
+        const r = this.brain.popRate(d.p.id), q = this.screenOf(d.k);
+        if (!q) continue;
+        u.strokeStyle = `rgba(255,225,150,${(0.3 + Math.min(0.6, r / 150)) * q.fade})`; u.lineWidth = 1;
+        u.beginPath(); u.arc(q.x, q.y, 6 + Math.min(10, r / 20), 0, TAU); u.stroke();
       }
     }
 
@@ -867,13 +1058,21 @@
         const burst = r > 90 && r > lb.avg * 3 + 40 ? 1 : 0; // その集団だけの極端な跳ね上がり
         lb.glow = Math.max(burst, lb.glow - dt * 1.5);
         if (!lb.fixed) { if (burst) lb.show = 1.5; lb.show -= dt; if (lb.show <= 0 && sp < 0.3) continue; }
-        const x = lb.x + 5, y = lb.y, bx = x - 2, by = y - 6, bw = lb.tw + 4, bh = 12;
+        let ax = lb.x, ay = lb.y, fade = 1;
+        if (this.gl3) {
+          const q = this.gl3.project(lb.X, lb.Y, lb.Z);
+          if (!q) continue;
+          ax = q.x; ay = q.y; fade = this.fade(q.w);
+          if (fade < 0.45 && lb.prio > 1 && sp < 0.3) continue; // 奥の中間層のラベルは省く
+        }
+        u.globalAlpha = fade;
+        const x = ax + 5, y = ay, bx = x - 2, by = y - 6, bw = lb.tw + 4, bh = 12;
         let hit = false;
         for (const q of placed) if (bx < q[0] + q[2] && bx + bw > q[0] && by < q[1] + q[3] && by + bh > q[1]) { hit = true; break; }
         if (hit) continue;
         placed.push([bx, by, bw, bh]);
         const g = Math.max(lb.glow * 0.8, sp * (0.4 + 0.6 * level));
-        u.fillStyle = rgba(lb.color, 0.35 + 0.65 * level); u.fillRect(lb.x - 1.5, lb.y - 1.5, 3, 3);
+        u.fillStyle = rgba(lb.color, 0.35 + 0.65 * level); u.fillRect(ax - 1.5, ay - 1.5, 3, 3);
         if (g > 0.25) {
           u.strokeStyle = `rgba(255,215,140,${g * 0.7})`; u.lineWidth = 1; u.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
           u.shadowColor = "rgba(255,220,160,0.8)"; u.shadowBlur = 6 * g;
@@ -884,6 +1083,7 @@
         u.fillText(lb.text, x, y);
         u.shadowBlur = 0;
       }
+      u.globalAlpha = 1;
       u.textBaseline = "alphabetic";
     }
 
@@ -1155,4 +1355,5 @@
   FM.WorldView = WorldView;
   FM.BrainView = BrainView;
   FM.glowSprite = glowSprite;
+  FM.moonTexture = moonTexture;
 })();

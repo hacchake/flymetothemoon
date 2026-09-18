@@ -31,6 +31,15 @@ INPUTS = {
 NT = {"acetylcholine": "ACh", "gaba": "GABA", "glutamate": "Glu", "dopamine": "DA", "serotonin": "5HT", "octopamine": "OA"}
 
 
+# 全ニューロンの座標の範囲（FAFB v783、ボクセル単位）
+X0, X1, Y0, Y1, Z0, Z1 = 21906, 225720, 12840, 110722, 16, 6968
+
+
+def to3d(px, py, pz):
+    half = (X1 - X0) / 2
+    return ((px - (X0 + X1) / 2) / half, -(py - (Y0 + Y1) / 2) / half, (pz * 10 - (Z0 + Z1) * 5) / half)
+
+
 def forward_influence(Wn, sources, hops=2):
     v = np.zeros(Wn.shape[0])
     v[sources] = 1.0
@@ -83,6 +92,10 @@ def main():
     x0, x1, y0, y1 = 21906, 225720, 12840, 110722  # 全ニューロンの範囲
     info["vx"] = (px - x0) / (x1 - x0)
     info["vy"] = (py - y0) / (y1 - y0)
+    # 立体の位置：FAFB の座標は x・y が 4 nm、z が 40 nm 刻みなので、z を 10 倍して縮尺をそろえる。
+    # 脳の中心を原点に、左右の幅の半分を 1 とする。y は上を正にする（画面の上 = 背側）
+    X, Y, Z = to3d(px, py, info.pos_z.to_numpy())
+    info["X"], info["Y"], info["Z"] = X, Y, Z
 
     # 集団 = 細胞型 × 左右
     info["pop"] = info.ct.astype(str).str.replace(r"[^A-Za-z0-9]+", "_", regex=True) + "_" + info.S
@@ -98,6 +111,7 @@ def main():
             "super_class": str(row.super_class), "nt": NT.get(row.top_nt, "?"),
             "root_ids": [str(r) for r in g.root_id] if "root_id" in g else [],
             "pos": [[round(float(x), 4), round(float(y), 4)] for x, y in zip(g.vx, g.vy)],
+            "pos3": [[round(float(a), 4), round(float(b), 4), round(float(c), 4)] for a, b, c in zip(g.X, g.Y, g.Z)],
         })
     # root_id は index 側にある
     idx_to_root = ann.set_index("idx").index.to_series()
@@ -134,15 +148,16 @@ def main():
     print("top intermediate types:", info[info.role == "inter"].ct.value_counts().head(15).to_dict())
     print(f"file: {len(js) / 1e6:.2f} MB")
 
-    # 背景に描く全脳の点群（6000 点を間引いて）
+    # 背景に描く全脳の点群（12000 点を間引いて）。[x2d, y2d, 種類, X, Y, Z]
     rng = np.random.default_rng(0)
-    allp = ann[["pos_x", "pos_y", "super_class"]].dropna()
-    s = allp.iloc[rng.choice(len(allp), 6000, replace=False)]
+    allp = ann[["pos_x", "pos_y", "pos_z", "super_class"]].dropna()
+    s = allp.iloc[rng.choice(len(allp), 12000, replace=False)]
     cls = {"optic": 0, "central": 1, "visual_projection": 2, "sensory": 3, "descending": 4}
-    atlas = [[round((x - x0) / (x1 - x0), 4), round((y - y0) / (y1 - y0), 4), cls.get(c, 5)]
-             for x, y, c in zip(s.pos_x, s.pos_y, s.super_class)]
+    AX, AY, AZ = to3d(s.pos_x.to_numpy(), s.pos_y.to_numpy(), s.pos_z.to_numpy())
+    atlas = [[round((x - x0) / (x1 - x0), 4), round((y - y0) / (y1 - y0), 4), cls.get(c, 5), round(float(a), 3), round(float(b), 3), round(float(d), 3)]
+             for x, y, c, a, b, d in zip(s.pos_x, s.pos_y, s.super_class, AX, AY, AZ)]
     (ROOT / "src" / "brain_atlas.js").write_text(
-        "// 自動生成：tools/extract_circuit.py。FlyWire FAFB v783 のニューロン位置を 6000 点に間引いたもの。CC BY-NC 4.0。\n"
+        "// 自動生成：tools/extract_circuit.py。FlyWire FAFB v783 のニューロン位置を 12000 点に間引いたもの。CC BY-NC 4.0。\n"
         "window.FM = window.FM || {};\nwindow.FM.ATLAS = " + json.dumps(atlas, separators=(",", ":")) + ";\n", encoding="utf-8")
 
 
