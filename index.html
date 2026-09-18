@@ -47,9 +47,12 @@
   #msgs { top: 34%; left: 0; right: 0; text-align: center; }
   .msg { font-size: 15px; letter-spacing: 0.2em; margin: 6px; text-shadow: 0 0 12px rgba(0,0,0,0.9); }
   .msg.good { color: var(--good); } .msg.bad { color: var(--bad); } .msg.moon { color: var(--moon); font-size: 22px; }
-  #hint { bottom: 64px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--dim); letter-spacing: 0.12em; padding: 0 16px; }
-
-  #toolbar { position: absolute; bottom: 12px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; padding: 0 10px; }
+  /* 下の帯：説明文は必ず道具ボタンの上に積む（ボタンが 2 段になっても重ならない） */
+  #bottom { position: absolute; bottom: 12px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+  #hint { position: static; text-align: center; font-size: 12px; line-height: 1.6; color: var(--dim); letter-spacing: 0.12em; padding: 0 16px;
+    text-shadow: 0 0 8px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95); }
+  #hint:empty { display: none; }
+  #toolbar { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; padding: 0 10px; pointer-events: auto; }
   button { background: rgba(18, 22, 50, 0.78); color: var(--ink); border: 1px solid var(--line); border-radius: 999px;
     padding: 8px 14px; font: inherit; font-size: 12px; letter-spacing: 0.08em; cursor: pointer; backdrop-filter: blur(4px); }
   button:hover { border-color: rgba(210, 220, 255, 0.55); }
@@ -94,6 +97,8 @@
     #question { display: none; }
     #hud-top { top: 44px; }
     button { padding: 7px 11px; }
+    #hint { font-size: 11px; letter-spacing: 0.06em; }
+    #bottom { bottom: 8px; gap: 6px; }
   }
 </style>
 </head>
@@ -116,9 +121,11 @@
       </div>
     </div>
     <div id="msgs" class="hud"></div>
-    <div id="hint" class="hud"></div>
     <div id="question">このハエの中に「月」はない。<br>あるのは光と、神経の発火と、翅の動きだけ。</div>
-    <div id="toolbar" class="hidden"></div>
+    <div id="bottom">
+      <div id="hint" class="hud"></div>
+      <div id="toolbar" class="hidden"></div>
+    </div>
     <div id="editbar" class="hidden"></div>
 
     <div id="corner">
@@ -166,17 +173,17 @@
     <canvas id="brain-ui"></canvas>
   </div>
 </div>
-<script src="src/circuit_flywire.js?v=24"></script>
-<script src="src/brain_atlas.js?v=24"></script>
-<script src="src/circuit.js?v=24"></script>
-<script src="src/brain.js?v=24"></script>
-<script src="src/interface.js?v=24"></script>
-<script src="src/stages.js?v=24"></script>
-<script src="src/world.js?v=24"></script>
-<script src="src/game.js?v=24"></script>
-<script src="src/brain3d.js?v=24"></script>
-<script src="src/render.js?v=24"></script>
-<script src="src/audio.js?v=24"></script>
-<script src="src/main.js?v=24"></script>
+<script src="src/circuit_flywire.js?v=25"></script>
+<script src="src/brain_atlas.js?v=25"></script>
+<script src="src/circuit.js?v=25"></script>
+<script src="src/brain.js?v=25"></script>
+<script src="src/interface.js?v=25"></script>
+<script src="src/stages.js?v=25"></script>
+<script src="src/world.js?v=25"></script>
+<script src="src/game.js?v=25"></script>
+<script src="src/brain3d.js?v=25"></script>
+<script src="src/render.js?v=25"></script>
+<script src="src/audio.js?v=25"></script>
+<script src="src/main.js?v=25"></script>
 </body>
 </html>

@@ -151,7 +151,14 @@
       if (this.ctx) { this.ctx.resume(); return; }
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
-      const ctx = (this.ctx = new AC());
+      // "playback"：遅れは少し増えるが、音の受け渡しに余裕を持たせて、重いときのブツブツを防ぐ
+      let ctx;
+      try { ctx = new AC({ latencyHint: "playback" }); } catch (e) { ctx = new AC(); }
+      this.ctx = ctx;
+      // 同時に鳴らせる声の上限（スマホや少ないコアでは控えめに）。超えたら飾りの音から省く
+      const weak = (navigator.hardwareConcurrency || 4) <= 4 || (window.matchMedia && matchMedia("(pointer: coarse)").matches);
+      this.maxVoices = weak ? 28 : 64;
+      this.voiceEnds = [];
       // 仕上げ：ローパス → 音量 → コンプ → リミッター
       this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.8;
       this.tone = ctx.createBiquadFilter(); this.tone.type = "lowpass"; this.tone.frequency.value = 2500; this.tone.Q.value = 0.5;
@@ -163,7 +170,7 @@
 
       // リバーブ：左右で別の減衰ノイズ（広がり）＋初期反射
       this.verb = ctx.createConvolver();
-      const len = Math.floor(ctx.sampleRate * 3.2), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+      const len = Math.floor(ctx.sampleRate * 2.2), ir = ctx.createBuffer(2, len, ctx.sampleRate);
       for (let ch = 0; ch < 2; ch++) {
         const d = ir.getChannelData(ch);
         for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
@@ -346,8 +353,28 @@
       this.shimVoices.forEach((o, k) => o.frequency.setTargetAtTime(mtof(root + 36 + [iv[0], iv[1], iv[3] || iv[2]][k]), t, 0.1));
     }
 
+    // 声の予約。鳴り終わる時刻を覚えておき、上限を超えるなら false（その音は鳴らさない）。
+    // pri が高い音（ベース・主旋律）は上限を少し超えてもよい
+    room(t, end, pri = 0) {
+      const now = this.ctx.currentTime, v = this.voiceEnds;
+      if (v.length > 16) { let k = 0; for (const e of v) if (e > now) v[k++] = e; v.length = k; }
+      if (v.length >= this.maxVoices * (pri ? 1.5 : 1)) return false;
+      v.push(end);
+      return true;
+    }
+
     schedule() {
-      while (this.next < this.ctx.currentTime + 0.15) {
+      const now = this.ctx.currentTime;
+      // 画面が止まって（重い処理・タブの切り替え）予定が過去になったら、たまった拍を一度に鳴らさず、今に合わせて進める
+      if (this.next < now - 0.05) {
+        const beat = 60 / this.song.bpm;
+        const skip = Math.ceil((now + 0.05 - this.next) / beat);
+        for (let i = 0; i < skip; i++) {
+          if (++this.beatIdx >= this.song.meter) { this.beatIdx = 0; this.bar = (this.bar + 1) % this.song.bars.length; if (this.bar === 0) this.chorus++; }
+        }
+        this.next += skip * beat;
+      }
+      while (this.next < now + 0.3) {
         const beat = 60 / this.song.bpm;
         this.playBeat(this.next, beat);
         this.next += beat;
@@ -498,6 +525,7 @@
     // ---- 楽器 ----
     // ウッドベース：弦をはじく音（明るいアタックがすぐ丸くなる）
     upright(m, t, dur, v) {
+      if (!this.room(t, t + dur * 1.2 + 0.1, 1)) return;
       const c = this.ctx, f = mtof(m), o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter();
       o.type = "triangle"; o.frequency.value = f; o2.type = "sine"; o2.frequency.value = f;
       lp.type = "lowpass"; lp.Q.value = 1.5; lp.frequency.setValueAtTime(1800, t); lp.frequency.exponentialRampToValueAtTime(380, t + 0.14);
@@ -510,6 +538,7 @@
       o.start(t); o2.start(t); o.stop(t + dur * 1.2 + 0.1); o2.stop(t + dur * 1.2 + 0.1);
     }
     synthBass(m, t, dur) {
+      if (!this.room(t, t + dur + 0.05, 1)) return;
       const c = this.ctx, o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter();
       o.type = "sawtooth"; o.frequency.value = mtof(m);
       f.type = "lowpass"; f.frequency.setValueAtTime(1400, t); f.frequency.exponentialRampToValueAtTime(300, t + dur); f.Q.value = 6;
@@ -519,6 +548,7 @@
     }
     // ローズ風エレピ：FM 合成（打った瞬間に明るく、すぐ丸くなる）＋金属的な「チン」
     rhodes(m, t, v, pan, dur = 1.6) {
+      if (!this.room(t, t + dur + 0.05)) return;
       const c = this.ctx, f = mtof(m);
       const car = c.createOscillator(), mod = c.createOscillator(), mg = c.createGain(), amp = c.createGain(), p = c.createStereoPanner();
       car.frequency.value = f; mod.frequency.value = f;
@@ -537,6 +567,7 @@
     }
     pluckChord(ns, t, v) {
       ns.forEach((n, i) => {
+        if (!this.room(t, t + 0.6)) return;
         const c = this.ctx, o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter();
         o.type = "triangle"; o.frequency.value = mtof(n);
         f.type = "lowpass"; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(900, t + 0.2);
@@ -545,7 +576,8 @@
         o.start(t); o.stop(t + 0.6);
       });
     }
-    vibes(m, t, v, pan) {
+    vibes(m, t, v, pan, pri = 0) {
+      if (!this.room(t, t + 1.8, pri)) return;
       const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), o3 = c.createOscillator(), g = c.createGain(), trem = c.createGain(), lfo = c.createOscillator(), lg = c.createGain(), p = c.createStereoPanner();
       o.type = "sine"; o.frequency.value = mtof(m);
       o2.type = "sine"; o2.frequency.value = mtof(m) * 4; const g2 = c.createGain(); g2.gain.value = 0.07;
@@ -556,7 +588,8 @@
       this.env(g, t, v, 0.002, 1.7);
       for (const x of [o, o2, o3, lfo]) { x.start(t); x.stop(t + 1.8); }
     }
-    celesta(m, t, v, pan) {
+    celesta(m, t, v, pan, pri = 0) {
+      if (!this.room(t, t + 0.9, pri)) return;
       const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain(), p = c.createStereoPanner();
       o.type = "sine"; o.frequency.value = mtof(m);
       o2.type = "sine"; o2.frequency.value = mtof(m) * 2.76;
@@ -568,8 +601,9 @@
     }
     // 主題を吹く楽器。前の音から近ければ、なめらかにつなぐ
     lead(m, t, dur, v, kind) {
-      if (kind === "vibes") return this.vibes(m, t, v * 1.3, 0.1);
-      if (kind === "celesta") return this.celesta(m + 12, t, v * 1.1, 0);
+      if (kind === "vibes") return this.vibes(m, t, v * 1.3, 0.1, 1);
+      if (kind === "celesta") return this.celesta(m + 12, t, v * 1.1, 0, 1);
+      if (!this.room(t, t + Math.max(0.12, dur) + 0.5, 1)) return;
       const c = this.ctx, f = mtof(m), o = c.createOscillator(), amp = c.createGain(), p = c.createStereoPanner();
       const pf = this.lastLeadF && Math.abs(Math.log2(f / this.lastLeadF)) < 0.42 && t - this.lastLeadEnd < 0.08 ? this.lastLeadF : f;
       o.frequency.setValueAtTime(pf, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.045);
@@ -616,6 +650,7 @@
     }
 
     noiseHit(t, type, freq, q, peak, dcy, dest = this.tone) {
+      if (!this.room(t, t + dcy + 0.05)) return null;
       const c = this.ctx, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
       s.buffer = this.noise; f.type = type; f.frequency.value = freq; f.Q.value = q;
       s.connect(f); f.connect(g); g.connect(dest);
@@ -636,13 +671,13 @@
     // 出来事の効果音
     sfx(type) {
       if (!this.ctx) return;
-      const t = this.ctx.currentTime, [root] = this.chordAt(this.bar, this.beatIdx);
+      const t = this.ctx.currentTime + 0.04, [root] = this.chordAt(this.bar, this.beatIdx);
       if (type === "clear") {
         // V → I の和音と、駆け上がるビブラフォン、クラッシュ
         const key = this.song.bars[0][0][0];
         this.comp(key + 7, "dom7", t, 0.12, 0.5);
         this.comp(key, "maj7", t + 0.28, 0.14, 2.4);
-        [0, 4, 7, 11, 14, 19, 23, 26].forEach((k, i) => this.vibes(key + 24 + k, t + 0.28 + i * 0.07, 0.18, (i / 4) - 1));
+        [0, 4, 7, 11, 14, 19, 23, 26].forEach((k, i) => this.vibes(key + 24 + k, t + 0.28 + i * 0.07, 0.18, (i / 4) - 1, 1));
         this.drum("crash", t + 0.28, 0.6, 0); this.drum("kick", t + 0.28, 0.8);
       }
       if (type === "witch") [0, 7, 12, 16, 19, 24, 28, 31].forEach((k, i) => this.celesta(root + 24 + k, t + i * 0.06, 0.12, Math.sin(i)));
