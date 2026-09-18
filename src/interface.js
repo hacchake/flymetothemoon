@@ -111,6 +111,7 @@
       this.V_MAX = 200;
       this.V_BRAKE = 40;
       this.OMEGA_MAX = 4.2; // rad/s
+      this.GF_THRESHOLD = 100; // Hz（迫る影では 200〜400 Hz。明るい光の近くでも 90 Hz 近くまで上がるので、その上に置く）
       this.gfCool = 0;
       this.out = { speed: 0, turn: 0, dash: false };
       this.dn = { turnL: 0, turnR: 0, fwd: 0, back: 0, gf: 0 };
@@ -146,7 +147,10 @@
       this.out.speed = Math.max(20, this.V_MIN + (this.V_MAX - this.V_MIN) * Math.tanh(fwd / 160) - this.V_BRAKE * Math.tanh(back / 40));
       this.gfCool -= dt;
       this.out.dash = false;
-      if (gf > 25 && this.gfCool <= 0) { this.out.dash = true; this.gfCool = 1.0; }
+      // 逃避の閾値。迫る影では GF は 200〜400 Hz になる。一方、抜き出した回路には
+      // 右目の前進用視覚（LC9/LC31a）から GF への経路があり、明るい光の近くでは 40〜90 Hz ほど発火する。
+      // 25 Hz にしていた頃は、何もない空で急に突進していた（「ピシッ」という音と方向転換）
+      if (gf > this.GF_THRESHOLD && this.gfCool <= 0) { this.out.dash = true; this.gfCool = 1.0; }
       Object.assign(this.dn, { turnL, turnR, fwd, back, gf });
       return this.out;
     }

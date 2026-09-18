@@ -17,7 +17,7 @@
     --good: #9df5b4;
     --bad: #ff8a8a;
     --uv: #b9a4ff;
-    --brain-h: clamp(190px, 36vh, 380px);
+    --brain-h: clamp(220px, 40vh, 440px);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
@@ -68,11 +68,24 @@
   .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
   .big-btn { font-size: 14px; padding: 12px 26px; letter-spacing: 0.2em; }
   #stage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; width: min(760px, 100%); }
+  #scr-select { justify-content: flex-start; overflow-y: auto; padding-top: 40px; }
   .card { text-align: left; border-radius: 14px; padding: 12px 14px; line-height: 1.5; }
   .card small { display: block; color: var(--faint); font-size: 10px; letter-spacing: 0.2em; }
   .card .stars { color: var(--moon); letter-spacing: 3px; font-size: 13px; }
   .stars-big { font-size: 40px; letter-spacing: 12px; color: var(--moon); text-shadow: 0 0 20px rgba(255, 241, 207, 0.6); }
   .stars-big .off { color: rgba(255,255,255,0.15); text-shadow: none; }
+  #song-name { margin-top: 4px; font-size: 10px; letter-spacing: 0.12em; color: rgba(255,225,170,0.7); }
+  #editbar { position: absolute; bottom: 10px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 0 10px; }
+  .etip { font-size: 11px; color: var(--dim); letter-spacing: 0.1em; }
+  .erow { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+  .erow button { padding: 5px 10px; font-size: 11px; }
+  .erow.main button { padding: 7px 16px; font-size: 12px; }
+  .ename { background: rgba(18,22,50,0.85); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 11px; width: 13em; }
+  #custom-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; width: min(760px, 100%); }
+  .card.custom { background: rgba(18, 22, 50, 0.6); border: 1px dashed var(--line); }
+  .row-mini { display: flex; gap: 4px; margin-top: 6px; }
+  .row-mini button { padding: 3px 9px; font-size: 10px; }
+  #secret-line { font-size: 11px; color: var(--moon); letter-spacing: 0.15em; min-height: 1em; }
   #corner { position: absolute; top: 10px; right: 12px; display: flex; gap: 6px; z-index: 5; }
   #corner button { padding: 5px 10px; font-size: 11px; }
   #question { position: absolute; left: 16px; bottom: 58px; font-size: 11px; color: var(--faint); letter-spacing: 0.1em; line-height: 1.7; max-width: 26ch; pointer-events: none; }
@@ -92,6 +105,7 @@
       <div>
         <div id="stage-name">STAGE <span id="stage-no"></span><b id="stage-title"></b></div>
         <div id="lives"></div>
+        <div id="song-name"></div>
       </div>
       <div id="stats">
         <span>SCORE</span><span class="big"><b id="score">0</b></span>
@@ -104,6 +118,7 @@
     <div id="hint" class="hud"></div>
     <div id="question">このハエの中に「月」はない。<br>あるのは光と、神経の発火と、翅の動きだけ。</div>
     <div id="toolbar" class="hidden"></div>
+    <div id="editbar" class="hidden"></div>
 
     <div id="corner">
       <button id="btn-sound" title="音 (M)">♪ 音</button>
@@ -119,13 +134,18 @@
       <div class="row">
         <button class="big-btn" id="btn-start">はじめる</button>
         <button class="big-btn" id="btn-sandbox">自由実験</button>
+        <button class="big-btn" id="btn-editor">ステージをつくる</button>
       </div>
+      <button id="btn-shared" class="hidden"></button>
     </section>
 
     <section id="scr-select" class="screen hidden">
       <p class="lead">ステージを選ぶ</p>
       <div id="stage-grid"></div>
-      <div class="row"><button id="btn-back">もどる</button></div>
+      <div id="secret-line"></div>
+      <p class="lead" style="font-size:13px">つくったステージ</p>
+      <div id="custom-grid"></div>
+      <div class="row"><button id="btn-new-custom">＋ ステージをつくる</button><button id="btn-back">もどる</button></div>
     </section>
 
     <section id="scr-result" class="screen hidden">
@@ -144,16 +164,16 @@
     <canvas id="brain-ui"></canvas>
   </div>
 </div>
-<script src="src/circuit_flywire.js?v=5"></script>
-<script src="src/brain_atlas.js?v=5"></script>
-<script src="src/circuit.js?v=5"></script>
-<script src="src/brain.js?v=5"></script>
-<script src="src/interface.js?v=5"></script>
-<script src="src/stages.js?v=5"></script>
-<script src="src/world.js?v=5"></script>
-<script src="src/game.js?v=5"></script>
-<script src="src/render.js?v=5"></script>
-<script src="src/audio.js?v=5"></script>
-<script src="src/main.js?v=5"></script>
+<script src="src/circuit_flywire.js?v=14"></script>
+<script src="src/brain_atlas.js?v=14"></script>
+<script src="src/circuit.js?v=14"></script>
+<script src="src/brain.js?v=14"></script>
+<script src="src/interface.js?v=14"></script>
+<script src="src/stages.js?v=14"></script>
+<script src="src/world.js?v=14"></script>
+<script src="src/game.js?v=14"></script>
+<script src="src/render.js?v=14"></script>
+<script src="src/audio.js?v=14"></script>
+<script src="src/main.js?v=14"></script>
 </body>
 </html>

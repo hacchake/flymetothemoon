@@ -9,6 +9,9 @@
     paper: "ハエトリ紙から逃げられなかった",
     car: "車にはねられた",
     exhaust: "力尽きた",
+    web: "クモの巣から逃げられなかった",
+    vinegar: "酢のわなに沈んだ",
+    frog: "カエルに食べられた",
   };
 
   class Game {
@@ -20,8 +23,9 @@
       this.time = 0;
       this.energy = 100;
       this.eaten = 0;
-      this.tools = Object.assign({}, stage.tools);
-      this.battery = stage.tools.lamp; // 秒
+      this.tools = Object.assign({}, stage.tools || {});
+      this.battery = this.tools.lamp || 0; // 秒
+      this.witch = false; // 魔女に会えたか
       this.state = "play"; // play | dying | clear | over
       this.wait = 0;
       this.messages = [];
@@ -67,7 +71,11 @@
         if (e.type === "eat") { this.eaten++; this.score += 50; this.energy = Math.min(100, this.energy + 40); this.say("+50 ごちそう", "good"); }
         if (e.type === "bump") { this.score -= 15; this.energy -= 4; }
         if (e.type === "heat") heat = true;
-        if (e.type === "stuck") this.say("捕まった！ 紙を連打して助けて", "bad", 3);
+        if (e.type === "stuck") this.say({ paper: "ハエトリ紙に捕まった！ 連打して助けて", web: "クモの巣にかかった！ 連打して助けて", vinegar: "酢に落ちた！ 連打して引き上げて" }[e.kind] || "捕まった！ 連打して助けて", "bad", 3);
+        if (e.type === "abduct") this.say("UFO に吸い込まれていく…", "bad", 2);
+        if (e.type === "abducted") { this.score -= 50; this.say("どこかへ降ろされた", "info", 2); }
+        if (e.type === "witch-appear") this.say("…月の前を、何かが横切る", "moon", 3);
+        if (e.type === "witch") { this.score += 777; this.witch = true; this.say("✦ 魔女に会った ✦ +777", "moon", 3.5); }
         if (e.type === "freed") { this.say("逃げ出した", "good"); }
         if (e.type === "dash") this.score += 5;
         if (e.type === "dead") this.die(e.cause);
@@ -97,7 +105,7 @@
 
     clear() {
       this.state = "clear";
-      const par = this.stage.par;
+      const par = this.stage.par || 40;
       this.stars = 1 + (this.lost === 0 ? 1 : 0) + (this.time <= par ? 1 : 0);
       this.timeBonus = Math.max(0, Math.round((par * 1.5 - this.time) * 20));
       this.score += 1000 + this.timeBonus + Math.round(this.energy * 3) + Math.round(this.battery * 10);

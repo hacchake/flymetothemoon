@@ -97,6 +97,9 @@
       const vis = (y, m = 200) => y > cam.y - m && y < cam.y + h / s + m;
 
       this.drawMoon(world.moon, t);
+      for (const p of world.planes) this.drawPlane(p, t);
+      if (world.witch) this.drawWitch(world.witch, t);
+      for (const u of world.ufos) this.drawUfo(u, world, t);
       this.drawCity(world, t, vis);
       for (const c of world.clouds) this.drawCloud(c, world.moon, t);
       for (const st of world.streetlights) this.drawStreetlight(st, world, t);
@@ -105,6 +108,12 @@
       for (const fd of world.foods) this.drawFood(fd, t);
       if (world.road) this.drawRoad(world);
       for (const c of world.cars) this.drawCar(c);
+      for (const wb of world.webs) this.drawWeb(wb, world, t);
+      for (const v of world.vinegars) this.drawVinegar(v, t);
+      for (const g of world.frogs) this.drawFrog(g, t);
+      for (const fan of world.fans) this.drawFan(fan, t);
+      for (const m of world.mirrors) this.drawMirror(m, world, t);
+      for (const b of world.fireflies) this.drawFirefly(b, world.time);
       if (world.lamp.on) this.drawLamp(world.lamp, game, t);
 
       // ハエの視線：見えている光へ、明るさぶんだけ細い線
@@ -132,6 +141,11 @@
       ctx.globalCompositeOperation = "source-over";
 
       if (f.state !== "dead") this.drawFly(f, t, s);
+      if (opts.edit) { // エディタ：スタート位置の目印
+        ctx.strokeStyle = "rgba(157,245,180,0.8)"; ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(f.x, f.y, 22, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(157,245,180,0.9)"; ctx.font = "11px system-ui"; ctx.textAlign = "center"; ctx.fillText("START", f.x, f.y + 38);
+      }
       for (const sw of world.swatters) this.drawSwatter(sw, t);
 
       // 粒子
@@ -151,6 +165,163 @@
         ctx.fillStyle = `rgba(255,255,255,${this.flashA})`; ctx.fillRect(0, 0, w, h);
         this.flashA *= 0.85; if (this.flashA < 0.01) this.flashA = 0;
       }
+    }
+
+    drawPlane(p, t) {
+      const { ctx } = this;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.scale(p.dir, 1);
+      ctx.fillStyle = "rgba(20,24,44,0.9)";
+      ctx.beginPath(); ctx.moveTo(-22, 0); ctx.lineTo(20, -2); ctx.lineTo(24, 0); ctx.lineTo(20, 2); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(-10, -12); ctx.lineTo(-4, -12); ctx.lineTo(6, 0); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(-24, -7); ctx.lineTo(-20, -7); ctx.lineTo(-14, 0); ctx.fill();
+      ctx.restore();
+      ctx.globalCompositeOperation = "lighter";
+      const blink = Math.sin(t * 6 + p.ph * 10) > 0;
+      ctx.drawImage(glowSprite([255, 60, 60]), p.x - p.dir * 10 - 6, p.y - 12, 12, 12);
+      if (blink) ctx.drawImage(glowSprite([80, 255, 120]), p.x + p.dir * 18 - 5, p.y - 5, 10, 10);
+      if (p.strobe) ctx.drawImage(glowSprite([255, 255, 255]), p.x - 30, p.y - 30, 60, 60);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    drawUfo(u, world, t) {
+      const { ctx } = this;
+      if (u.beam > 0.02) {
+        const g = ctx.createLinearGradient(u.x, u.y, u.x, u.y + 420);
+        g.addColorStop(0, `rgba(170,255,210,${0.45 * u.beam})`); g.addColorStop(1, "rgba(170,255,210,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(u.x - 16, u.y + 8); ctx.lineTo(u.x + 16, u.y + 8);
+        ctx.lineTo(u.x + 18 + 420 * 0.35, u.y + 420); ctx.lineTo(u.x - 18 - 420 * 0.35, u.y + 420); ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = "#1b2238";
+      ctx.beginPath(); ctx.ellipse(u.x, u.y, 46, 12, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = "rgba(160,220,255,0.35)";
+      ctx.beginPath(); ctx.ellipse(u.x, u.y - 8, 18, 12, 0, Math.PI, TAU); ctx.fill();
+      ctx.globalCompositeOperation = "lighter";
+      const cols = [[255, 90, 200], [90, 220, 255], [255, 230, 90]];
+      for (let i = 0; i < 7; i++) {
+        const a = t * 2 + (i / 7) * TAU, x = u.x + Math.cos(a) * 38;
+        if (Math.sin(a) > -0.3) ctx.drawImage(glowSprite(cols[i % 3]), x - 6, u.y - 2, 12, 12);
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    drawWitch(w, t) {
+      const { ctx } = this;
+      ctx.save(); ctx.translate(w.x, w.y); ctx.scale(w.dir, 1);
+      ctx.fillStyle = "#07060c";
+      ctx.fillRect(-30, 6, 52, 2.5); // ほうき
+      ctx.beginPath(); ctx.moveTo(-30, 7); ctx.lineTo(-44, 0); ctx.lineTo(-44, 14); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-6, 6); ctx.lineTo(4, 6); ctx.lineTo(0, -10); ctx.closePath(); ctx.fill(); // からだ
+      ctx.beginPath(); ctx.arc(1, -12, 4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-6, -14); ctx.lineTo(8, -14); ctx.lineTo(2, -30); ctx.closePath(); ctx.fill(); // とんがり帽子
+      ctx.beginPath(); ctx.moveTo(-4, -2); ctx.quadraticCurveTo(-18, -4 + Math.sin(t * 8) * 3, -24, 2); ctx.lineTo(-4, 2); ctx.fill(); // マント
+      ctx.restore();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.drawImage(glowSprite([255, 200, 120]), w.x + w.dir * 20 - 7, w.y - 1, 14, 14);
+      for (let i = 0; i < 3; i++) ctx.drawImage(glowSprite([255, 230, 170]), w.x - w.dir * (48 + i * 14) + Math.sin(t * 9 + i) * 4, w.y + 4 + Math.cos(t * 7 + i) * 4, 5, 5);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    drawFirefly(b, time) {
+      const { ctx } = this;
+      const on = Math.max(0, Math.sin(time * 2.2 + b.blink) - 0.55) / 0.45;
+      ctx.fillStyle = "rgba(40,50,30,0.8)"; ctx.fillRect(b.x - 1, b.y - 1, 2, 2);
+      if (on <= 0) return;
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = on;
+      ctx.drawImage(glowSprite([200, 255, 90]), b.x - 10, b.y - 10, 20, 20);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    drawWeb(wb, world, t) {
+      const { ctx } = this;
+      ctx.strokeStyle = "rgba(200,210,235,0.16)"; ctx.lineWidth = 0.8;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        ctx.beginPath(); ctx.moveTo(wb.x, wb.y); ctx.lineTo(wb.x + Math.cos(a) * wb.r, wb.y + Math.sin(a) * wb.r); ctx.stroke();
+      }
+      for (let r = 10; r < wb.r; r += 11) {
+        ctx.beginPath();
+        for (let i = 0; i <= 8; i++) { const a = (i / 8) * TAU, x = wb.x + Math.cos(a) * r, y = wb.y + Math.sin(a) * r; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+        ctx.stroke();
+      }
+      // 捕まっている間はクモが近づいてくる
+      const f = world.fly;
+      const stuck = f.state === "stuck" && f.stuck === "web" && Math.hypot(f.x - wb.x, f.y - wb.y) < wb.r + 10;
+      const k = stuck ? 1 - f.t / FM.STUCK.web.time : 0;
+      const sx = wb.x + (stuck ? (f.x - wb.x) * k : 0), sy = wb.y - wb.r * (1 - k) + (stuck ? (f.y - wb.y) * k : 0);
+      ctx.fillStyle = "#0a080c"; ctx.beginPath(); ctx.arc(sx, sy, 6, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "#0a080c"; ctx.lineWidth = 1.2;
+      for (let i = 0; i < 4; i++) for (const d of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + d * (8 + i * 1.5), sy - 6 + i * 4 + Math.sin(t * 10 + i) * 1.5); ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(255,60,60,0.8)"; ctx.fillRect(sx - 2, sy - 2, 1.5, 1.5); ctx.fillRect(sx + 0.5, sy - 2, 1.5, 1.5);
+    }
+
+    drawVinegar(v, t) {
+      const { ctx } = this;
+      const g = ctx.createRadialGradient(v.x, v.y - 40, 0, v.x, v.y - 40, 190);
+      g.addColorStop(0, "rgba(255,190,120,0.12)"); g.addColorStop(1, "rgba(255,190,120,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(v.x, v.y - 40, 190, 0, TAU); ctx.fill();
+      ctx.fillStyle = "rgba(170,200,230,0.18)"; roundRect(ctx, v.x - 20, v.y - 44, 40, 44, 6); ctx.fill();
+      ctx.strokeStyle = "rgba(200,220,255,0.45)"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "rgba(200,120,60,0.7)"; ctx.fillRect(v.x - 18, v.y - 20, 36, 18);
+      ctx.fillStyle = "rgba(255,255,255,0.15)"; ctx.fillRect(v.x - 16, v.y - 20, 30, 2);
+      ctx.fillStyle = "rgba(220,230,255,0.4)"; ctx.fillRect(v.x - 22, v.y - 47, 44, 4); // 口
+      ctx.fillStyle = "rgba(255,210,150,0.55)"; ctx.font = "10px system-ui"; ctx.textAlign = "center"; ctx.fillText("酢", v.x, v.y - 26);
+      for (let i = 0; i < 3; i++) {
+        const k = ((t * 20 + i * 15) % 45) / 45;
+        ctx.fillStyle = `rgba(255,200,140,${0.25 * (1 - k)})`;
+        ctx.beginPath(); ctx.arc(v.x + Math.sin(t * 2 + i) * 6, v.y - 50 - k * 45, 2, 0, TAU); ctx.fill();
+      }
+    }
+
+    drawFrog(g, t) {
+      const { ctx } = this;
+      const lift = g.aim * 8, x = g.x, y = g.y;
+      if (g.state === "strike" && g.tongue > 0) {
+        const ex = x + 6 + (g.tx - x - 6) * g.tongue, ey = y - 20 - lift + (g.ty - y + 20 + lift) * g.tongue;
+        ctx.strokeStyle = "#e0607a"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(x + 6, y - 20 - lift); ctx.lineTo(ex, ey); ctx.stroke();
+        ctx.fillStyle = "#e0607a"; ctx.beginPath(); ctx.arc(ex, ey, 4, 0, TAU); ctx.fill();
+      }
+      ctx.fillStyle = "#1f3a2a";
+      ctx.beginPath(); ctx.ellipse(x, y - 10, 24, 12, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x + 8, y - 18 - lift, 14, 9, -0.3, 0, TAU); ctx.fill();
+      ctx.fillStyle = g.aim > 0 ? "#ffd84a" : "#c9b63a";
+      ctx.beginPath(); ctx.arc(x + 2, y - 26 - lift, 4, 0, TAU); ctx.arc(x + 14, y - 26 - lift, 4, 0, TAU); ctx.fill();
+      ctx.fillStyle = "#000"; ctx.fillRect(x + 1, y - 27 - lift, 2, 2); ctx.fillRect(x + 13, y - 27 - lift, 2, 2);
+    }
+
+    drawFan(fan, t) {
+      const { ctx } = this;
+      ctx.strokeStyle = "rgba(180,220,255,0.18)"; ctx.lineWidth = 1;
+      for (let i = 0; i < 6; i++) {
+        const x = fan.x - 36 + i * 14, ph = (t * 1.6 + i * 0.37) % 1;
+        ctx.beginPath(); ctx.moveTo(x, fan.y - 10 - ph * 420); ctx.lineTo(x + Math.sin(ph * 6) * 4, fan.y - 50 - ph * 420); ctx.stroke();
+      }
+      ctx.fillStyle = "#1c2236"; ctx.fillRect(fan.x - 3, fan.y, 6, 26); ctx.fillRect(fan.x - 16, fan.y + 24, 32, 5);
+      ctx.save(); ctx.translate(fan.x, fan.y); ctx.scale(1, 0.35);
+      ctx.fillStyle = "rgba(170,200,240,0.55)";
+      for (let i = 0; i < 3; i++) { ctx.rotate(TAU / 3); ctx.beginPath(); ctx.ellipse(12 * Math.cos(fan.spin), 0, 14, 6, fan.spin, 0, TAU); ctx.fill(); }
+      ctx.restore();
+    }
+
+    drawMirror(m, world, t) {
+      const { ctx } = this;
+      const lit = !world.occluded(world.moon.x, world.moon.y, m.x, m.y);
+      if (lit) {
+        ctx.strokeStyle = "rgba(255,245,220,0.12)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(world.moon.x, world.moon.y); ctx.lineTo(m.x, m.y); ctx.stroke();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.drawImage(glowSprite([255, 245, 215]), m.x - 22, m.y - 22, 44, 44);
+        ctx.globalCompositeOperation = "source-over";
+      }
+      ctx.fillStyle = "#2a2f45"; ctx.fillRect(m.x - 2, m.y, 4, 24);
+      ctx.fillStyle = lit ? "rgba(230,240,255,0.95)" : "rgba(150,160,190,0.6)";
+      ctx.beginPath(); ctx.ellipse(m.x, m.y, 12, 16, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "#8a7a5a"; ctx.lineWidth = 2; ctx.stroke();
     }
 
     drawMoon(m, t) {
@@ -422,11 +593,15 @@
 
     // FlyWire 座標（正面から見た 0..1）→ パネル上の位置
     frame() {
-      const pad = 16, eyeW = this.w < 600 ? 0 : Math.min(120, this.w * 0.14);
-      const aw = this.w - 2 * (pad + eyeW), ah = this.h - 2 * pad - 20;
+      const wide = this.w >= 900;
+      const sideW = wide ? Math.max(210, Math.min(270, this.w * 0.2)) : 0;
+      const top = 38, bottom = wide ? 46 : 96;
+      const eyeW = this.w < 600 ? 0 : Math.min(80, this.w * 0.07);
+      const x0 = sideW + eyeW + 6, x1 = this.w - sideW - eyeW - 6;
+      const aw = Math.max(50, x1 - x0), ah = Math.max(40, this.h - top - bottom);
       const aspect = 2.08; // FlyWire の脳の横:縦
       const bw = Math.min(aw, ah * aspect), bh = bw / aspect;
-      return { x: (this.w - bw) / 2, y: pad + (ah - bh) / 2 + 6, w: bw, h: bh, eyeW };
+      return { x: x0 + (aw - bw) / 2, y: top + (ah - bh) / 2, w: bw, h: bh, eyeW, sideW, top, bottom, wide };
     }
 
     buildLayout() {
@@ -479,11 +654,29 @@
       blur.width = lo.width; blur.height = lo.height;
       const bctx = blur.getContext("2d");
       const canBlur = "filter" in bctx;
-      this.layout = { pos, col, size, atlas, F, dn, isDN, isGF, lo, lctx: lo.getContext("2d"), colStr, blur, bctx, canBlur };
+      // ラベル：集団ごとに重心へ置く。FlyWire の中間層は 3 個以上のものを常に、それ以外は強く反応したときだけ出す
+      const isFW = B.circuit.meta.name === "flywire";
+      this.lfont = "9px ui-monospace, Menlo, Consolas, monospace";
+      const u = this.uctx; u.font = this.lfont;
+      const labels = B.pops.map((p) => {
+        let sx = 0, sy = 0;
+        for (let i = 0; i < p.n; i++) { sx += pos[(p.offset + i) * 2]; sy += pos[(p.offset + i) * 2 + 1]; }
+        const text = labelText(p);
+        return {
+          p, x: sx / p.n, y: sy / p.n, text, tw: u.measureText(text).width, color: col[p.offset],
+          fixed: !isFW || p.role !== "inter" || p.source !== "flywire" || p.n >= 3,
+          prio: p.role === "dn" ? 0 : p.role === "sensor" ? 1 : p.source !== "flywire" ? 2 : 3,
+          avg: -1, glow: 0, show: 0,
+        };
+      }).sort((a, b) => a.prio - b.prio || b.p.n - a.p.n);
+      // 計器用：感覚の種類 × 左右 → 集団
+      const mods = {};
+      for (const p of B.pops) if (p.modality) (mods[p.modality + p.side] ||= []).push(p);
+      this.layout = { pos, col, size, atlas, F, dn, isDN, isGF, lo, lctx: lo.getContext("2d"), colStr, blur, bctx, canBlur, labels, mods };
     }
 
     // simDt：このフレームで脳が進んだ時間（0 のこともある）。dtFrame：画面の経過時間（動きの速さに使う）
-    draw(senses, motor, t, simDt, dtFrame = 1 / 60) {
+    draw(senses, motor, t, simDt, dtFrame = 1 / 60, hud = {}) {
       if (!this.brain) return;
       if (!this.layout) this.buildLayout();
       const { fctx: c, w, h, brain: B } = this;
@@ -514,7 +707,7 @@
       for (let i = 0; i < B.N; i++) {
         const n = B.spikeCount[i];
         if (!n) continue;
-        if (isDN[i] && this.rings.length < 60) this.rings.push({ x: pos[i * 2], y: pos[i * 2 + 1], r: 4, t: 0, gf: isGF[i] === 1 });
+        if (isDN[i] && this.rings.length < 60) this.rings.push({ x: pos[i * 2], y: pos[i * 2 + 1], r: 4, t: 0, gf: isGF[i] === 1 && B.trace[i] > 100 }); // 衝撃波は本当に逃げるほどの発火のときだけ
         if (budget <= 0) continue;
         const s0 = B.synStart[i], s1 = B.synStart[i + 1];
         if (s1 > s0 && Math.random() < 0.2 * n) {
@@ -594,7 +787,7 @@
         c.strokeStyle = g.gf ? `rgba(220,170,255,${a})` : `rgba(255,220,150,${a})`;
         c.lineWidth = g.gf ? 3 : 1.5;
         c.beginPath(); c.arc(g.x, g.y, g.r, 0, TAU); c.stroke();
-        if (g.gf && !g.flashed) { g.flashed = true; this.flashA = Math.max(this.flashA, 0.3); }
+        if (g.gf && !g.flashed) { g.flashed = true; this.flashA = Math.max(this.flashA, 0.1); }
       }
       this.rings = this.rings.filter((g) => g.t < (g.gf ? 1 : 0.4));
       if (this.flashA > 0) {
@@ -603,67 +796,347 @@
       }
       c.globalCompositeOperation = "source-over";
 
-      this.drawUI(senses, motor, t);
+      this.drawUI(senses, motor, t, hud, dtFrame);
     }
 
-    drawUI(senses, motor, t) {
+    // ---------------- 計器盤（毎フレーム描き直す UI キャンバス） ----------------
+    drawUI(senses, motor, t, hud, dtFrame) {
       const { uctx: u, w, h, brain: B } = this;
-      const { F, dn } = this.layout;
+      const L = this.layout, F = L.F;
       u.clearRect(0, 0, w, h);
-      u.font = "10px ui-monospace, Menlo, monospace";
-      u.textAlign = "left";
-      u.fillStyle = "rgba(210,220,255,0.75)";
-      const meta = B.circuit.meta;
-      const src = meta.name === "flywire" ? "FLYWIRE v783 実データ（視覚・逃避）＋ 模式（嗅覚）" : "模式の回路（比較用）";
-      u.fillText(`BRAIN  ${src}`, 14, 16);
-      u.fillStyle = "rgba(210,220,255,0.5)";
-      u.fillText(`${B.N.toLocaleString()} neurons · ${B.nSyn.toLocaleString()} connections · ${Math.round(this.spikesPerSec).toLocaleString()} spikes/s`, 14, 30);
+      u.textBaseline = "alphabetic";
 
-      // DN のラベル
-      u.font = "10px system-ui, sans-serif";
-      for (const d of dn) {
-        const rate = B.popRate(d.p.id);
-        const a = 0.35 + Math.min(0.65, rate / 120);
-        u.strokeStyle = `rgba(255,225,150,${a})`; u.lineWidth = 1;
-        u.beginPath(); u.arc(d.x, d.y, 7 + Math.min(10, rate / 20), 0, TAU); u.stroke();
-        u.fillStyle = `rgba(255,235,190,${a})`;
-        u.textAlign = d.p.side === "L" ? "right" : "left";
-        u.fillText(d.p.label, d.x + (d.p.side === "L" ? -12 : 12), d.y + 3);
+      // 発火の履歴（10 Hz で 12 秒ぶん）と、光っているニューロンの数
+      this.hist ||= new Float32Array(120);
+      this.histT = (this.histT || 0) + dtFrame;
+      if (this.histT >= 0.1) { this.histT = 0; this.hist.copyWithin(0, 1); this.hist[119] = this.spikesPerSec; }
+      let active = 0;
+      for (let i = 0; i < B.N; i++) if (B.trace[i] > 1.5) active++;
+
+      // 見出し
+      u.textAlign = "left"; u.font = `10px ${MONO}`;
+      u.fillStyle = INK(0.85);
+      const src = B.circuit.meta.name === "flywire" ? "FLYWIRE v783 実データ（視覚・逃避）＋ 模式（嗅覚）" : "模式の回路（比較用）";
+      u.fillText(`BRAIN  ${src}`, F.sideW + 12, 16);
+      u.fillStyle = INK(0.5);
+      u.fillText(`${B.N.toLocaleString()} neurons · ${B.nSyn.toLocaleString()} connections`, F.sideW + 12, 30);
+
+      this.drawDNRings(u);
+      this.drawLabels(u, dtFrame);
+      this.drawEyes(u, senses);
+      if (F.wide) {
+        this.drawSensesPanel(u, senses, hud, 8, 8, F.sideW - 12, h - F.bottom - 12);
+        this.drawMotorPanel(u, motor, hud, w - F.sideW + 4, 8, F.sideW - 12, h - F.bottom - 12);
       }
+      this.drawBottom(u, senses, motor, hud, active, t);
+    }
 
-      // 左右の複眼：ハエに見えている世界そのもの
-      const narrow = w < 600;
-      const eyeR = narrow ? 34 : Math.min(F.h * 0.42, 70);
+    // 集団ごとの発火率（感覚の種類 × 左右でまとめる）
+    modRate(mod, side) {
+      const ps = this.layout.mods[mod + side];
+      if (!ps) return 0;
+      let s = 0, n = 0;
+      for (const p of ps) { s += this.brain.popRate(p.id) * p.n; n += p.n; }
+      return s / n;
+    }
+    rate(id) { return this.brain.popById[id] ? this.brain.popRate(id) : 0; }
+
+    drawDNRings(u) {
+      for (const d of this.layout.dn) {
+        const r = this.brain.popRate(d.p.id);
+        u.strokeStyle = `rgba(255,225,150,${0.3 + Math.min(0.6, r / 150)})`; u.lineWidth = 1;
+        u.beginPath(); u.arc(d.x, d.y, 6 + Math.min(10, r / 20), 0, TAU); u.stroke();
+      }
+    }
+
+    // 特別な瞬間（逃避・食事・月・死・魔女…）に、ラベル全体を一度だけ光らせる
+    special(strength = 1) { this.specialA = Math.max(this.specialA || 0, strength); }
+
+    // 集団のラベル。ふだんは発火に応じて明るさが変わるだけ。
+    // 枠つきで光るのは、特別な瞬間と、その集団だけが極端に跳ね上がったとき
+    drawLabels(u, dt) {
+      const B = this.brain, placed = [];
+      this.specialA = Math.max(0, (this.specialA || 0) - dt * 1.4);
+      const sp = this.specialA;
+      u.font = this.lfont; u.textAlign = "left"; u.textBaseline = "middle";
+      for (const lb of this.layout.labels) {
+        const r = B.popRate(lb.p.id);
+        if (lb.avg < 0) lb.avg = r; // 最初のフレームは今の値から始める
+        lb.avg += (r - lb.avg) * Math.min(1, dt / 3); // 3 秒の平均
+        const level = Math.min(1, r / 160); // ふだんの明るさ
+        const burst = r > 90 && r > lb.avg * 3 + 40 ? 1 : 0; // その集団だけの極端な跳ね上がり
+        lb.glow = Math.max(burst, lb.glow - dt * 1.5);
+        if (!lb.fixed) { if (burst) lb.show = 1.5; lb.show -= dt; if (lb.show <= 0 && sp < 0.3) continue; }
+        const x = lb.x + 5, y = lb.y, bx = x - 2, by = y - 6, bw = lb.tw + 4, bh = 12;
+        let hit = false;
+        for (const q of placed) if (bx < q[0] + q[2] && bx + bw > q[0] && by < q[1] + q[3] && by + bh > q[1]) { hit = true; break; }
+        if (hit) continue;
+        placed.push([bx, by, bw, bh]);
+        const g = Math.max(lb.glow * 0.8, sp * (0.4 + 0.6 * level));
+        u.fillStyle = rgba(lb.color, 0.35 + 0.65 * level); u.fillRect(lb.x - 1.5, lb.y - 1.5, 3, 3);
+        if (g > 0.25) {
+          u.strokeStyle = `rgba(255,215,140,${g * 0.7})`; u.lineWidth = 1; u.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+          u.shadowColor = "rgba(255,220,160,0.8)"; u.shadowBlur = 6 * g;
+          u.fillStyle = `rgba(255,${240 - 25 * g},${205 - 50 * g},${0.5 + 0.5 * g})`;
+        } else {
+          u.fillStyle = lb.p.source === "game" ? `rgba(255,150,190,${0.35 + 0.5 * level})` : INK(0.28 + 0.6 * level);
+        }
+        u.fillText(lb.text, x, y);
+        u.shadowBlur = 0;
+      }
+      u.textBaseline = "alphabetic";
+    }
+
+    // 左右の複眼：ハエに見えている世界そのもの
+    drawEyes(u, senses) {
+      const F = this.layout.F;
+      if (!F.eyeW) return;
+      const eyeR = Math.min(F.h * 0.42, F.eyeW * 0.95, 70);
+      u.font = `10px ${MONO}`;
       for (const side of ["L", "R"]) {
         const lum = side === "L" ? senses.lumL : senses.lumR;
-        const cx = narrow ? (side === "L" ? 30 : w - 30) : side === "L" ? F.x - eyeR * 0.55 : F.x + F.w + eyeR * 0.55;
-        const cy = narrow ? h - 70 : F.y + F.h * 0.45;
+        const cx = side === "L" ? F.x - eyeR * 0.55 : F.x + F.w + eyeR * 0.55; // 脳のすぐ脇に
+        const cy = F.y + F.h * 0.45;
         for (let c = 0; c < senses.cols; c++) {
           for (let row = 0; row < 3; row++) {
-            // 列 c：正面（上）→ 後ろ（下）に並べる
-            const a = (-0.8 + (c / (senses.cols - 1)) * 1.6) * (Math.PI / 2);
+            const a = (-0.8 + (c / (senses.cols - 1)) * 1.6) * (Math.PI / 2); // 列 c：正面（上）→ 後ろ（下）
             const rr = eyeR * (0.55 + row * 0.2);
             const x = cx + (side === "L" ? -1 : 1) * Math.cos(a) * rr * 0.6, y = cy + Math.sin(a) * rr;
             const v = Math.min(1, lum[c] / 1.2);
-            hex(u, x, y, narrow ? 3.2 : 5.5, `rgba(${180 + 75 * v},${190 + 60 * v},255,${0.08 + v * 0.9})`);
+            hex(u, x, y, Math.max(3, eyeR * 0.08), `rgba(${180 + 75 * v},${190 + 60 * v},255,${0.08 + v * 0.9})`);
           }
         }
-        u.fillStyle = "rgba(200,210,240,0.5)"; u.textAlign = "center";
+        u.fillStyle = INK(0.5); u.textAlign = "center";
         u.fillText(side === "L" ? "左目" : "右目", cx, cy + eyeR + 14);
       }
+    }
 
-      // 運動の読み出し
-      const o = motor.out, cx = w / 2, by = h - 16;
-      u.fillStyle = "rgba(200,210,240,0.55)"; u.textAlign = "center";
-      u.fillText(`推力 ${Math.round(o.speed)}   旋回 ${o.turn > 0.1 ? "◀ 左" : o.turn < -0.1 ? "右 ▶" : "—"}   ${motor.dn.gf > 25 ? "GF 逃避!" : ""}`, cx, by);
-      const tw = 90;
-      u.fillStyle = "rgba(255,255,255,0.08)"; u.fillRect(cx - tw, by - 18, tw * 2, 3);
-      u.fillStyle = "rgba(255,220,150,0.9)";
-      const tv = Math.max(-1, Math.min(1, o.turn / 4.2));
-      u.fillRect(tv > 0 ? cx - tv * tw : cx, by - 18, Math.abs(tv) * tw, 3);
-      u.textAlign = "left";
-      u.fillStyle = "rgba(200,210,240,0.35)";
-      u.fillText("金 = 興奮性シナプス　青 = 抑制性シナプス　点線の集団 = 作品側の駆動", 14, h - 6);
+    // ---- 左：感覚 ----
+    drawSensesPanel(u, senses, hud, x, y, w, h) {
+      panel(u, x, y, w, h, "SENSES  感覚");
+      const g = hud.game, cx = x + 10, cw = w - 20;
+      let yy = y + 32;
+      yy = retinaStrip(u, senses, cx, yy, cw, 14) + 10;
+      const rows = [
+        ["LC10 追跡 左", this.modRate("light_steer", "L") || this.modRate("retina", "L"), 150, C_VIS],
+        ["LC10 追跡 右", this.modRate("light_steer", "R") || this.modRate("retina", "R"), 150, C_VIS],
+        ["LC9/31 前進 左", this.modRate("light_fwd", "L"), 150, C_VIS],
+        ["LC9/31 前進 右", this.modRate("light_fwd", "R"), 150, C_VIS],
+        ["接近 LPLC2/LC4 左", this.modRate("loom", "L"), 220, C_LOOM],
+        ["接近 LPLC2/LC4 右", this.modRate("loom", "R"), 220, C_LOOM],
+        ["匂い Or42b 左", this.modRate("odor", "L"), 150, C_OLF],
+        ["匂い Or42b 右", this.modRate("odor", "R"), 150, C_OLF],
+        ["空腹", g ? g.hunger * 100 : 0, 100, C_WARN, g ? `${Math.round(g.hunger * 100)}%` : "—"],
+      ];
+      const rowH = Math.max(15, Math.min(22, (y + h - yy - 4) / rows.length));
+      for (const [label, v, max, c, txt] of rows) {
+        if (yy + rowH > y + h) break;
+        meter(u, cx, yy + 8, cw, label, v, max, c, txt ?? `${Math.round(v)} Hz`);
+        yy += rowH;
+      }
+    }
+
+    // ---- 右：運動 ----
+    drawMotorPanel(u, motor, hud, x, y, w, h) {
+      panel(u, x, y, w, h, "MOTOR  運動（下行ニューロン）");
+      const cx = x + 10, cw = w - 20, half = (cw - 56) / 2;
+      let yy = y + 30;
+      u.font = `9px ${MONO}`; u.textAlign = "center"; u.fillStyle = INK(0.45);
+      u.fillText("左", cx + 56 + half / 2, yy); u.fillText("右", cx + 56 + half * 1.5 + 4, yy);
+      yy += 8;
+      const rows = [["DNa02 旋回", "DNa02", 200], ["DNa01", "DNa01", 200], ["DNp09 推力", "DNp09", 250], ["MDN 後退", "MDN", 100], ["GF 逃避", "GF", 200]];
+      const rowH = Math.max(14, Math.min(19, (h - 150) / rows.length));
+      for (const [label, id, max] of rows) {
+        u.textAlign = "left"; u.font = `9px ${MONO}`; u.fillStyle = INK(0.62);
+        u.fillText(label, cx, yy + 7);
+        const c = id === "GF" || id === "MDN" ? C_LOOM : C_MOTOR;
+        segBar(u, cx + 56, yy, half, 7, this.rate(`${id}_L`) / max, c);
+        segBar(u, cx + 60 + half, yy, half, 7, this.rate(`${id}_R`) / max, c);
+        yy += rowH;
+      }
+      // 計器：旋回・推力・方位
+      const o = motor.out, r = Math.max(18, Math.min(34, (y + h - yy - 26) / 2, cw / 6.6));
+      const gy = Math.min(y + h - r - 18, yy + r + 12);
+      const gx = [cx + cw / 6, cx + cw / 2, cx + (cw * 5) / 6];
+      turnGauge(u, gx[0], gy, r, o.turn / 4.2);
+      arcGauge(u, gx[1], gy, r, o.speed / 200, `${Math.round(o.speed)}`, "推力 px/s");
+      const f = hud.world && hud.world.fly;
+      let moonAz = null;
+      if (hud.world) moonAz = hud.world.view(hud.world.moon.x, hud.world.moon.y).az;
+      compass(u, gx[2], gy, r, f ? f.h : 0, moonAz);
+      if (motor.dn.gf > motor.GF_THRESHOLD) {
+        u.fillStyle = `rgba(255,110,130,${0.6 + 0.4 * Math.sin(performance.now() / 60)})`;
+        u.font = `bold 10px ${MONO}`; u.textAlign = "right"; u.fillText("GF 逃避!", x + w - 10, y + 15);
+      }
+    }
+
+    // ---- 下：発火の推移と数値 ----
+    drawBottom(u, senses, motor, hud, active, t) {
+      const { w, h } = this, F = this.layout.F, B = this.brain;
+      const y0 = h - F.bottom + 4;
+      u.strokeStyle = "rgba(150,170,230,0.18)"; u.beginPath(); u.moveTo(0, y0 - 2.5); u.lineTo(w, y0 - 2.5); u.stroke();
+      let x = 12, yLine = y0 + 12;
+      if (!F.wide) {
+        // 狭い画面：ハエの視界と、DN の小さなバー
+        retinaStrip(u, senses, 12, y0 + 12, Math.min(260, w * 0.5), 10);
+        const bx = Math.min(290, w * 0.5 + 24), bw = w - bx - 12;
+        const dn = [["DNa02 左", this.rate("DNa02_L"), 200], ["DNa02 右", this.rate("DNa02_R"), 200], ["DNp09", (this.rate("DNp09_L") + this.rate("DNp09_R")) / 2, 250], ["GF", Math.max(this.rate("GF_L"), this.rate("GF_R")), 200]];
+        dn.forEach(([l, v, m], i) => meter(u, bx + (i % 2) * (bw / 2 + 4), y0 + 14 + Math.floor(i / 2) * 20, bw / 2 - 4, l, v, m, i === 3 ? C_LOOM : C_MOTOR, `${Math.round(v)}`));
+        yLine = y0 + 58;
+      }
+      // 発火の推移
+      const sw = Math.min(300, w * 0.32), sh = 22, sy = yLine;
+      u.font = `9px ${MONO}`; u.textAlign = "left"; u.fillStyle = INK(0.5);
+      u.fillText("SPIKES/S", x, sy - 2);
+      let max = 20000;
+      for (const v of this.hist) max = Math.max(max, v);
+      u.strokeStyle = "rgba(255,205,120,0.85)"; u.lineWidth = 1.2; u.beginPath();
+      for (let i = 0; i < 120; i++) { const px = x + 56 + (i / 119) * (sw - 56), py = sy + sh - 4 - (this.hist[i] / max) * (sh - 6); i ? u.lineTo(px, py) : u.moveTo(px, py); }
+      u.stroke();
+      // 数値
+      const o = motor.out, g = hud.game;
+      const cells = [
+        ["SPIKES/S", Math.round(this.spikesPerSec).toLocaleString()],
+        ["ACTIVE", `${active.toLocaleString()} / ${B.N.toLocaleString()}`],
+        ["THRUST", `${Math.round(o.speed)} px/s`],
+        ["YAW", `${o.turn > 0.1 ? "◀ " : o.turn < -0.1 ? "▶ " : ""}${Math.round(Math.abs(o.turn) * 57.3)}°/s`],
+        ["ENERGY", g ? `${Math.max(0, Math.round(g.energy))}%` : "—"],
+        ["T", `${t.toFixed(1)} s`],
+      ];
+      let cxp = x + sw + 16;
+      for (const [k, v] of cells) {
+        if (cxp + 70 > w) break;
+        u.fillStyle = INK(0.4); u.font = `8px ${MONO}`; u.fillText(k, cxp, sy + 4);
+        u.fillStyle = "rgba(255,225,170,0.92)"; u.font = `11px ${MONO}`; u.fillText(v, cxp, sy + 17);
+        cxp += Math.max(78, u.measureText(v).width + 18);
+      }
+      if (F.wide) {
+        u.textAlign = "right"; u.fillStyle = INK(0.3); u.font = `9px ${MONO}`;
+        u.fillText("金 = 興奮性　青 = 抑制性　桃 = 作品側の駆動　光るラベル = 反応が強い集団", w - 12, h - 6);
+      }
+    }
+  }
+
+  // ======================================================================
+  //  計器の部品
+  // ======================================================================
+  const MONO = "ui-monospace, Menlo, Consolas, monospace";
+  const INK = (a) => `rgba(210,220,255,${a})`;
+  const C_VIS = [110, 200, 255], C_LOOM = [200, 130, 255], C_OLF = [120, 235, 160], C_MOTOR = [255, 205, 120], C_WARN = [255, 140, 120];
+
+  // 集団のラベル。FlyWire の入力には役割を添える
+  function labelText(p) {
+    const side = p.side === "L" ? " L" : p.side === "R" ? " R" : "";
+    if (p.role === "dn" || p.source !== "flywire") return p.label + (p.role === "dn" ? "" : side);
+    const t = p.label;
+    if (/^LC10/.test(t)) return `${t} 追跡${side}`;
+    if (/^(LC9|LC31a)$/.test(t)) return `${t} 前進${side}`;
+    if (/^(LPLC2|LC4)$/.test(t)) return `${t} 接近${side}`;
+    return t + side;
+  }
+
+  function panel(u, x, y, w, h, title) {
+    roundRect(u, x + 0.5, y + 0.5, w - 1, h - 1, 8);
+    u.fillStyle = "rgba(8,12,30,0.55)"; u.fill();
+    u.strokeStyle = "rgba(150,170,230,0.22)"; u.lineWidth = 1; u.stroke();
+    u.fillStyle = "rgba(255,205,120,0.9)"; u.font = `bold 10px ${MONO}`; u.textAlign = "left";
+    u.fillText(title, x + 10, y + 16);
+    u.fillStyle = "rgba(255,205,120,0.25)"; u.fillRect(x + 10, y + 21, w - 20, 1);
+  }
+
+  // 目盛りつきのバー（上に名前と値）
+  function meter(u, x, y, w, label, v, max, color, text) {
+    u.font = `9px ${MONO}`; u.textAlign = "left"; u.fillStyle = INK(0.62);
+    u.fillText(label, x, y);
+    u.textAlign = "right"; u.fillStyle = "rgba(255,230,180,0.9)";
+    u.fillText(text, x + w, y);
+    u.textAlign = "left";
+    segBar(u, x, y + 3, w, 5, v / max, color);
+  }
+
+  function segBar(u, x, y, w, h, f, color) {
+    f = Math.max(0, Math.min(1, f || 0));
+    const segs = Math.max(8, Math.floor(w / 6)), sw = w / segs;
+    for (let i = 0; i < segs; i++) {
+      const on = i < f * segs;
+      u.fillStyle = on ? (i / segs > 0.85 ? "rgba(255,120,120,0.95)" : rgba(color, 0.4 + 0.6 * (i / segs))) : "rgba(255,255,255,0.06)";
+      u.fillRect(x + i * sw, y, sw - 1.2, h);
+    }
+  }
+
+  // ハエに見えているもの：左目の外側 … 正面 … 右目の外側
+  function retinaStrip(u, senses, x, y, w, h) {
+    u.font = `9px ${MONO}`; u.textAlign = "left"; u.fillStyle = INK(0.62);
+    u.fillText("ハエに見えているもの", x, y);
+    u.textAlign = "right"; u.fillStyle = INK(0.35); u.fillText("左 ← 正面 → 右", x + w, y);
+    const cells = [...Array.from(senses.lumL).reverse(), ...senses.lumR];
+    const cw = w / cells.length;
+    cells.forEach((v, i) => {
+      const a = Math.min(1, v / 1.2);
+      u.fillStyle = `rgba(${190 + 65 * a},${200 + 50 * a},255,${0.06 + a * 0.94})`;
+      u.fillRect(x + i * cw, y + 4, cw - 1.5, h);
+    });
+    u.fillStyle = "rgba(255,205,120,0.8)"; u.fillRect(x + w / 2 - 0.5, y + 2, 1, h + 4);
+    u.textAlign = "left";
+    return y + 4 + h;
+  }
+
+  function dialFace(u, x, y, r, label) {
+    u.beginPath(); u.arc(x, y, r, 0, TAU);
+    u.fillStyle = "rgba(4,6,18,0.8)"; u.fill();
+    u.strokeStyle = "rgba(150,170,230,0.35)"; u.lineWidth = 1; u.stroke();
+    u.font = `8px ${MONO}`; u.fillStyle = INK(0.5); u.textAlign = "center";
+    u.fillText(label, x, y + r + 11);
+  }
+
+  // 旋回計：針が左右に振れる（左が負ではなく、画面どおり左に倒れる）
+  function turnGauge(u, x, y, r, v) {
+    dialFace(u, x, y, r, "旋回");
+    u.strokeStyle = INK(0.3);
+    for (let k = -2; k <= 2; k++) {
+      const a = -Math.PI / 2 + k * 0.45;
+      u.beginPath(); u.moveTo(x + Math.cos(a) * r * 0.78, y + Math.sin(a) * r * 0.78); u.lineTo(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95); u.stroke();
+    }
+    const a = -Math.PI / 2 - Math.max(-1, Math.min(1, v)) * 0.9;
+    u.strokeStyle = "rgba(255,210,130,0.95)"; u.lineWidth = 2;
+    u.beginPath(); u.moveTo(x, y); u.lineTo(x + Math.cos(a) * r * 0.85, y + Math.sin(a) * r * 0.85); u.stroke();
+    // 小さなハエの影（翼の傾き）
+    u.save(); u.translate(x, y + r * 0.35); u.rotate(-v * 0.6);
+    u.fillStyle = "rgba(255,210,130,0.7)"; u.fillRect(-r * 0.45, -1, r * 0.9, 2); u.fillRect(-1.5, -3, 3, 5);
+    u.restore();
+    u.lineWidth = 1;
+  }
+
+  // 推力計：下から時計回りに振れる弧
+  function arcGauge(u, x, y, r, f, text, label) {
+    dialFace(u, x, y, r, label);
+    const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
+    u.lineWidth = 3; u.strokeStyle = "rgba(255,255,255,0.08)";
+    u.beginPath(); u.arc(x, y, r * 0.8, a0, a1); u.stroke();
+    f = Math.max(0, Math.min(1, f));
+    u.strokeStyle = f > 0.85 ? "rgba(255,130,120,0.95)" : "rgba(255,205,120,0.95)";
+    u.beginPath(); u.arc(x, y, r * 0.8, a0, a0 + (a1 - a0) * f); u.stroke();
+    u.lineWidth = 1;
+    u.fillStyle = "rgba(255,230,180,0.95)"; u.font = `${Math.round(r * 0.42)}px ${MONO}`; u.textAlign = "center";
+    u.fillText(text, x, y + r * 0.15);
+  }
+
+  // 方位計：ハエの向き。月の方角は人間のための目印（ハエの脳には「月」は無い）
+  function compass(u, x, y, r, heading, moonAz) {
+    dialFace(u, x, y, r, "方位 ◯=月");
+    u.strokeStyle = INK(0.25);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * TAU;
+      u.beginPath(); u.moveTo(x + Math.cos(a) * r * 0.82, y + Math.sin(a) * r * 0.82); u.lineTo(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95); u.stroke();
+    }
+    // ハエの向き（画面の上 = 空）
+    u.strokeStyle = "rgba(140,210,255,0.95)"; u.lineWidth = 2;
+    u.beginPath(); u.moveTo(x, y); u.lineTo(x + Math.cos(heading) * r * 0.8, y + Math.sin(heading) * r * 0.8); u.stroke();
+    u.lineWidth = 1;
+    if (moonAz != null) {
+      const a = heading - moonAz; // 世界での月の方角
+      u.strokeStyle = "rgba(255,240,205,0.9)";
+      u.beginPath(); u.arc(x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62, 3.2, 0, TAU); u.stroke();
     }
   }
 
