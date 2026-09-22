@@ -517,7 +517,7 @@
       this.senses.sample(w);
       this.senses.apply(this.brain, { hunger: g.hunger });
       this.brain.run(dt * 1000);
-      const cmd = this.motor.read(this.brain, dt);
+      const cmd = this.motor.read(this.brain, dt, { surge: this.senses.odorTrend });
       const events = w.step(dt, cmd);
       this.effects(events);
       const r = g.update(dt, w, events);
@@ -632,6 +632,12 @@
         lamp: w.lamp.on, dt: elapsed,
       });
 
+      // ハエの見た目に、いま浴びている光と、触角を押す風を伝える（描画だけのための値）
+      const S = this.senses;
+      let lit = 0;
+      for (let c = 0; c < S.cols; c++) lit = Math.max(lit, S.lumL[c], S.lumR[c]);
+      this.worldView.flyLit = Math.min(1, lit * 0.8);
+      this.worldView.windBend = Math.max(-0.7, Math.min(0.7, (S.windL - S.windR) * 0.5 + (S.soundL + S.soundR) * 0.1));
       this.worldView.draw(w, this.senses, this.game, this.cam, this.t, { sight: !this.noSight && !editing, dt: elapsed, edit: editing ? this.edit : null });
       if (!document.body.classList.contains("no-brain")) this.brainView.draw(this.senses, this.motor, this.t, simDt, elapsed, { world: w, game: this.game });
       this.hud(elapsed);
@@ -677,7 +683,7 @@
       senses.sample(world);
       senses.apply(brain, { hunger: 0.5 });
       brain.run(STEP * 1000);
-      const ev = world.step(STEP, motor.read(brain, STEP));
+      const ev = world.step(STEP, motor.read(brain, STEP, { surge: senses.odorTrend }));
       for (const e of ev) { if (e.type === "moon") reached = true; if (e.type === "eat") eaten++; if (e.type === "bump") hits++; if (e.type === "dash") dashes++; }
       minDist = Math.min(minDist, world.distToMoon());
       if (reached || world.fly.state === "dead") break;

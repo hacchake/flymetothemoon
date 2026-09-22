@@ -4,8 +4,8 @@
 // ゲームのルールも「月」という概念も、このファイルには出てこない。
 //
 // 2 種類の回路を用意する：
-//   FM.CIRCUITS.flywire   … 視覚と逃避は FlyWire v783 の実ニューロン・実シナプス数（src/circuit_flywire.js）。
-//                           嗅覚と作品側の駆動だけ模式で足す。既定。
+//   FM.CIRCUITS.flywire   … 視覚・逃避・嗅覚・触角の機械感覚すべてが FlyWire v783 の実ニューロンと
+//                           実シナプス数（src/circuit_flywire.js）。作品側の駆動だけを足す。既定。
 //   FM.CIRCUITS.schematic … すべて模式（Phase 2）。比較用。
 //
 // populations:
@@ -13,7 +13,8 @@
 //   n        ニューロン数
 //   cols     視覚の列数（模式の網膜だけ）。n = cols × 列あたりの数
 //   role     sensor | inter | dn | drive
-//   modality 感覚ニューロンが何を受けるか（light_steer | light_fwd | loom | retina | odor | drive）
+//   modality 感覚ニューロンが何を受けるか
+//            （light_steer | light_fwd | loom | retina | odor | odor_food | odor_bad | wind | sound | drive）
 //   source   "flywire"（実データ） | "flywire-type"（FlyWire の細胞型に対応する模式） | "game"（作品側の駆動）
 //   pos      可視化用の位置（FlyWire の実座標を正面から見たもの、0..1）。無ければ xy に集団ごとに置く
 // projections:
@@ -147,7 +148,7 @@
     for (const pr of F.projections) {
       B.projections.push(Object.assign({}, pr, { from: rename[pr.from] || pr.from, to: rename[pr.to] || pr.to }));
     }
-    schematicOlfaction(B);
+    // 嗅覚（ORN）も触角の機械感覚（JO）も実データで入っているので、模式で足すものはもう無い
     gameDrives(B);
     return {
       meta: Object.assign({}, F.meta, { name: "flywire", w_syn_mV: 0.275 }),

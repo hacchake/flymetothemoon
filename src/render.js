@@ -41,26 +41,79 @@
       this.dpr = dpr; this.w = w; this.h = h;
       const rng = FM.mulberry32(7);
       this.stars = Array.from({ length: Math.round((w * h) / 1800) }, () => ({
-        x: rng() * w, y: rng() * h * 3, r: rng() * 1.3 + 0.2, p: rng() * TAU, s: 0.4 + rng() * 1.8,
+        x: rng() * w, y: rng() * h * 3, r: rng() * 1.3 + 0.2, p: rng() * TAU, s: 0.4 + rng() * 1.8, warm: rng() < 0.25,
       }));
     }
 
     setWorld(world) {
-      // 街並み（奥・手前の 2 層）。シードで固定
+      // 街並み（奥・中・手前の 3 層）。シードで固定し、動かない部分は絵にして焼いておく
       const rng = FM.mulberry32(world.stage.id * 97 + 3);
-      const mk = (n, hMin, hMax) => {
-        const out = []; let x = -40;
-        while (x < 1040) {
-          const bw = 40 + rng() * 90, bh = hMin + rng() * (hMax - hMin);
+      const mk = (hMin, hMax, dens, tall) => {
+        const out = []; let x = -60;
+        while (x < 1060) {
+          const bw = 34 + rng() * (tall ? 70 : 100), bh = hMin + rng() * (hMax - hMin);
           const wins = [];
-          for (let wy = 14; wy < bh - 10; wy += 16) for (let wx = 8; wx < bw - 8; wx += 13) if (rng() < 0.28) wins.push([wx, wy, rng()]);
-          out.push({ x, w: bw, h: bh, wins, antenna: rng() < 0.2 });
-          x += bw + rng() * 12;
+          for (let wy = 14; wy < bh - 10; wy += 16) for (let wx = 8; wx < bw - 8; wx += 13) if (rng() < dens) wins.push([wx, wy, rng()]);
+          out.push({
+            x, w: bw, h: bh, wins, antenna: rng() < 0.2,
+            tank: rng() < 0.3, vents: rng() < 0.5, step: rng() < 0.35 ? 0.3 + rng() * 0.3 : 0,
+            neon: rng() < 0.22 ? { y: 18 + rng() * (bh * 0.4), h: 30 + rng() * 60, hue: rng(), side: rng() < 0.5 ? -1 : 1 } : null,
+          });
+          x += bw + rng() * 14;
         }
         return out;
       };
-      this.cityFar = mk(0, 120, 380);
-      this.cityNear = mk(0, 60, 200);
+      // 奥ほど小さく・淡く・窓は少なく
+      this.city = [
+        { bld: mk(150, 460, 0.12, true), col: "#0a0d26", win: 0.26, par: 0.55, fog: 0.62 },
+        { bld: mk(100, 300, 0.2, false), col: "#070a1a", win: 0.5, par: 0.78, fog: 0.3 },
+        { bld: mk(50, 190, 0.3, false), col: "#05070f", win: 0.85, par: 1, fog: 0 },
+      ];
+      for (const L of this.city) L.sheet = null; // 初回の描画で焼く
+      this.wires = [];
+      for (let i = 0; i < 7; i++) {
+        const x0 = rng() * 900, dx = 120 + rng() * 220;
+        this.wires.push({ x0, x1: x0 + dx, y: 40 + rng() * 120, sag: 14 + rng() * 26, n: Math.floor(rng() * 3) });
+      }
+      this.starsSeed = world.stage.id;
+    }
+
+    // 街の 1 層を絵に焼く（毎フレーム何百個も矩形を描かなくて済む）
+    bakeCity(L, ground) {
+      const H = Math.max(...L.bld.map((b) => b.h)) + 120;
+      const cv = document.createElement("canvas");
+      cv.width = 1120; cv.height = Math.ceil(H);
+      const c = cv.getContext("2d");
+      c.translate(60, H); // 世界の x = -60 が絵の左端、地面が下端
+      for (const b of L.bld) {
+        c.fillStyle = L.col;
+        c.fillRect(b.x, -b.h, b.w, b.h);
+        if (b.step) { c.fillRect(b.x + b.w * 0.15, -b.h - b.h * b.step * 0.25, b.w * 0.7, b.h * b.step * 0.25); }
+        // 屋上：貯水タンクと室外機
+        if (b.tank) { c.fillRect(b.x + b.w * 0.55, -b.h - 16, 16, 16); c.fillRect(b.x + b.w * 0.55 + 3, -b.h - 22, 10, 6); }
+        if (b.vents) { c.fillRect(b.x + 6, -b.h - 7, 12, 7); c.fillRect(b.x + 22, -b.h - 5, 8, 5); }
+        if (b.antenna) {
+          c.fillRect(b.x + b.w / 2 - 1, -b.h - 34, 2, 34);
+          c.strokeStyle = "rgba(255,255,255,0.05)"; c.lineWidth = 1;
+          c.beginPath(); c.moveTo(b.x + b.w / 2 - 7, -b.h - 12); c.lineTo(b.x + b.w / 2 + 7, -b.h - 12); c.stroke();
+        }
+        // 縦のネオン看板
+        if (b.neon) {
+          const nx = b.x + (b.neon.side < 0 ? 3 : b.w - 9), ny = -b.h + b.neon.y;
+          const [r, g2, bl] = hsl2rgb(b.neon.hue, 0.8, 0.6);
+          c.fillStyle = `rgba(${r},${g2},${bl},0.5)`; c.fillRect(nx, ny, 6, b.neon.h);
+          for (let k = 4; k < b.neon.h; k += 11) { c.fillStyle = `rgba(255,255,255,0.5)`; c.fillRect(nx + 1.5, ny + k, 3, 5); }
+        }
+      }
+      // 窓（明るさのばらつきを込みで焼く。明滅は描画時にひとつまみだけ足す）
+      for (const b of L.bld) for (const [wx, wy, r] of b.wins) {
+        if (r < 0.12) continue; // 消えている部屋
+        const warm = r < 0.82;
+        c.fillStyle = warm ? `rgba(255,${185 + r * 50},${100 + r * 70},${L.win * (0.45 + r * 0.55)})`
+          : `rgba(${150 + r * 40},${210 + r * 30},255,${L.win * 0.5})`; // たまに青い蛍光灯
+        c.fillRect(b.x + wx, -b.h + wy, 5, 7);
+      }
+      L.sheet = cv; L.sheetH = H;
     }
 
     burst(x, y, color, n = 18, speed = 90) {
@@ -84,13 +137,60 @@
       sky.addColorStop(0.55, up < 0.5 ? "#0a0f2a" : "#070a1e");
       sky.addColorStop(1, `rgb(${22 + 20 * up},${18 + 8 * up},${48 + 10 * up})`);
       ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+
+      // 天の川：空の高いところを斜めに横切る淡い帯
+      const mwY = h * 0.3 - cam.y * s * 0.1;
+      ctx.save();
+      ctx.translate(w * 0.5, mwY); ctx.rotate(-0.42); ctx.translate(-w * 0.5, 0);
+      const mw = ctx.createLinearGradient(0, -110, 0, 110);
+      mw.addColorStop(0, "rgba(150,170,255,0)"); mw.addColorStop(0.45, "rgba(170,185,255,0.055)");
+      mw.addColorStop(0.55, "rgba(210,200,255,0.05)"); mw.addColorStop(1, "rgba(150,170,255,0)");
+      ctx.fillStyle = mw; ctx.fillRect(-w, -110, w * 3, 220);
+      ctx.restore();
+
       for (const st of this.stars) {
         const y = (st.y - cam.y * s * 0.15) % (h * 3);
         if (y < 0 || y > h) continue;
-        ctx.globalAlpha = 0.3 + 0.45 * Math.sin(t * st.s + st.p) ** 2;
-        ctx.fillStyle = "#dfe6ff"; ctx.fillRect(st.x, y, st.r, st.r);
+        const tw = 0.3 + 0.45 * Math.sin(t * st.s + st.p) ** 2;
+        ctx.globalAlpha = tw;
+        ctx.fillStyle = st.warm ? "#ffe6cf" : "#dfe6ff";
+        ctx.fillRect(st.x, y, st.r, st.r);
+        if (st.r > 1.1) { // 明るい星は十字にきらめく
+          ctx.globalAlpha = tw * 0.35;
+          ctx.fillRect(st.x - 2, y + st.r / 2 - 0.25, st.r + 4, 0.7);
+          ctx.fillRect(st.x + st.r / 2 - 0.25, y - 2, 0.7, st.r + 4);
+        }
       }
       ctx.globalAlpha = 1;
+
+      // 流れ星（たまに、すっと横切る）
+      this.shootT = (this.shootT ?? 3) - (opts.dt ?? 1 / 60);
+      if (this.shootT < 0) {
+        this.shoot = { x: Math.random() * w, y: Math.random() * h * 0.4, vx: -160 - Math.random() * 220, vy: 90 + Math.random() * 90, t: 0 };
+        this.shootT = 9 + Math.random() * 22;
+      }
+      if (this.shoot) {
+        const S = this.shoot; S.t += opts.dt ?? 1 / 60;
+        S.x += S.vx * (opts.dt ?? 1 / 60); S.y += S.vy * (opts.dt ?? 1 / 60);
+        const a = Math.max(0, 1 - S.t / 1.1);
+        if (a <= 0) this.shoot = null;
+        else {
+          const sg = ctx.createLinearGradient(S.x, S.y, S.x - S.vx * 0.22, S.y - S.vy * 0.22);
+          sg.addColorStop(0, `rgba(255,255,255,${a * 0.9})`); sg.addColorStop(1, "rgba(180,200,255,0)");
+          ctx.strokeStyle = sg; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.moveTo(S.x, S.y); ctx.lineTo(S.x - S.vx * 0.22, S.y - S.vy * 0.22); ctx.stroke();
+        }
+      }
+
+      // 街の光害：地平線のあたりが、うっすらオレンジに濁る
+      const hy = (world.ground - cam.y) * s;
+      if (hy > -200 && hy < h + 400) {
+        const y0 = Math.max(0, hy - 380), y1 = Math.min(h, hy + 20);
+        const glow = ctx.createLinearGradient(0, hy - 380, 0, hy + 20);
+        glow.addColorStop(0, "rgba(255,150,70,0)"); glow.addColorStop(0.75, "rgba(255,146,64,0.035)");
+        glow.addColorStop(1, "rgba(255,170,90,0.085)");
+        ctx.fillStyle = glow; ctx.fillRect(0, y0, w, Math.max(0, y1 - y0));
+      }
 
       // ここから世界座標
       ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * (sx - cam.x * s), dpr * (sy - cam.y * s));
@@ -100,7 +200,7 @@
       for (const p of world.planes) this.drawPlane(p, t);
       if (world.witch) this.drawWitch(world.witch, t);
       for (const u of world.ufos) this.drawUfo(u, world, t);
-      this.drawCity(world, t, vis);
+      this.drawCity(world, t, vis, cam);
       for (const c of world.clouds) this.drawCloud(c, world.moon, t);
       for (const st of world.streetlights) this.drawStreetlight(st, world, t);
       for (const p of world.papers) this.drawPaper(p, t);
@@ -165,6 +265,29 @@
         ctx.fillStyle = `rgba(255,255,255,${this.flashA})`; ctx.fillRect(0, 0, w, h);
         this.flashA *= 0.85; if (this.flashA < 0.01) this.flashA = 0;
       }
+
+      // 仕上げ：四隅を落とす（ビネット）と、うっすらフィルムの粒
+      if (!this.vignette || this.vignette.w !== w || this.vignette.h !== h) {
+        const cv = document.createElement("canvas");
+        cv.width = Math.max(1, Math.round(w)); cv.height = Math.max(1, Math.round(h));
+        const c2 = cv.getContext("2d");
+        const vg = c2.createRadialGradient(w / 2, h * 0.45, Math.min(w, h) * 0.3, w / 2, h * 0.45, Math.max(w, h) * 0.78);
+        vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(0.65, "rgba(2,3,10,0.18)"); vg.addColorStop(1, "rgba(1,2,8,0.5)");
+        c2.fillStyle = vg; c2.fillRect(0, 0, w, h);
+        this.vignette = { cv, w, h };
+      }
+      ctx.drawImage(this.vignette.cv, 0, 0, w, h);
+      if (!this.grain) {
+        const N = 128, cv = document.createElement("canvas");
+        cv.width = cv.height = N;
+        const c2 = cv.getContext("2d"), img = c2.createImageData(N, N), d = img.data;
+        for (let i = 0; i < N * N; i++) { const v = Math.random() * 255; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 12; }
+        c2.putImageData(img, 0, 0);
+        this.grain = cv;
+      }
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(this.grain, -Math.floor(Math.random() * 128), -Math.floor(Math.random() * 128), 128 * Math.ceil(w / 128 + 1), 128 * Math.ceil(h / 128 + 1));
+      ctx.globalAlpha = 1;
     }
 
     drawPlane(p, t) {
@@ -346,23 +469,66 @@
       ctx.beginPath(); ctx.arc(m.x, m.y, m.r - ctx.lineWidth / 2, 0, TAU); ctx.stroke();
     }
 
-    drawCity(world, t, vis) {
+    drawCity(world, t, vis, cam) {
       const { ctx } = this;
       const g = world.ground;
-      if (!vis(g, 500)) return;
-      for (const [layer, col, winA] of [[this.cityFar, "#0b0e22", 0.45], [this.cityNear, "#070914", 0.8]]) {
-        for (const b of layer) {
-          ctx.fillStyle = col; ctx.fillRect(b.x, g - b.h, b.w, b.h);
-          if (b.antenna) { ctx.fillRect(b.x + b.w / 2 - 1, g - b.h - 30, 2, 30); ctx.fillStyle = `rgba(255,80,80,${0.4 + 0.4 * Math.sin(t * 3 + b.x)})`; ctx.fillRect(b.x + b.w / 2 - 2, g - b.h - 32, 4, 4); }
-          for (const [wx, wy, r] of b.wins) {
-            const on = Math.sin(t * 0.3 + r * 50) > -0.7;
-            if (!on) continue;
-            ctx.fillStyle = `rgba(255,${190 + r * 40},${110 + r * 60},${winA * (0.5 + r * 0.5)})`;
-            ctx.fillRect(b.x + wx, g - b.h + wy, 5, 7);
+      if (!vis(g, 700)) return;
+      for (const L of this.city) {
+        if (!L.sheet) this.bakeCity(L, g);
+        // 視差：奥の層ほど、カメラの動きに対してゆっくり流れる
+        const px = cam.x * (1 - L.par);
+        ctx.save(); ctx.translate(px, 0);
+        ctx.drawImage(L.sheet, -60, g - L.sheetH, L.sheet.width, L.sheetH);
+        // 空気遠近：奥ほど空の色に沈む
+        if (L.fog > 0) {
+          ctx.globalCompositeOperation = "source-atop";
+          ctx.fillStyle = `rgba(10,13,38,${L.fog})`;
+          ctx.fillRect(-60, g - L.sheetH, L.sheet.width, L.sheetH);
+          ctx.globalCompositeOperation = "source-over";
+        }
+        // 動くもの：赤い航空障害灯と、明滅する窓をひとつまみ
+        ctx.globalCompositeOperation = "lighter";
+        for (const b of L.bld) {
+          if (b.antenna) {
+            const a = 0.35 + 0.45 * Math.sin(t * 3 + b.x) ** 2;
+            ctx.fillStyle = `rgba(255,70,70,${a * (1 - L.fog)})`; ctx.fillRect(b.x + b.w / 2 - 2, g - b.h - 36, 4, 4);
+          }
+          if (b.wins.length && b.wins[0][2] > 0.5) {
+            const [wx, wy, r] = b.wins[(Math.floor(t * 0.4 + b.x) % b.wins.length + b.wins.length) % b.wins.length];
+            if (Math.sin(t * 0.7 + r * 30) > 0.6) { ctx.fillStyle = `rgba(255,220,150,${0.5 * (1 - L.fog)})`; ctx.fillRect(b.x + wx, g - b.h + wy, 5, 7); }
           }
         }
+        ctx.globalCompositeOperation = "source-over";
+        ctx.restore();
       }
-      ctx.fillStyle = "#05060e"; ctx.fillRect(-50, g, 1100, 200);
+      // 電線（手前の層）
+      ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1.2;
+      for (const w of this.wires) {
+        const y = g - 150 - w.y;
+        ctx.beginPath(); ctx.moveTo(w.x0, y); ctx.quadraticCurveTo((w.x0 + w.x1) / 2, y + w.sag, w.x1, y); ctx.stroke();
+        for (let k = 0; k < w.n; k++) { // 電線にとまっている何か
+          const bx = w.x0 + (w.x1 - w.x0) * (0.3 + k * 0.25);
+          ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx, y + w.sag * 0.6, 3, 4);
+        }
+      }
+      // 濡れた路面：街の光と月を映す
+      const gl = ctx.createLinearGradient(0, g, 0, g + 120);
+      gl.addColorStop(0, "#0a0c1a"); gl.addColorStop(1, "#04050c");
+      ctx.fillStyle = gl; ctx.fillRect(-50, g, 1100, 220);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(-50, g, 1100, 220); ctx.clip();
+      ctx.globalCompositeOperation = "lighter";
+      for (const L of world.lights()) {
+        if (L.y > g - 5) continue;
+        const h = Math.min(150, (g - L.y) * 0.5), a = Math.min(0.32, L.I * 0.25);
+        const rg = ctx.createLinearGradient(0, g, 0, g + h);
+        rg.addColorStop(0, `rgba(255,225,175,${a})`); rg.addColorStop(1, "rgba(255,225,175,0)");
+        ctx.fillStyle = rg;
+        const w2 = 6 + L.r * 1.4;
+        ctx.beginPath(); ctx.moveTo(L.x - w2, g); ctx.lineTo(L.x + w2, g); ctx.lineTo(L.x + w2 * 2.4, g + h); ctx.lineTo(L.x - w2 * 2.4, g + h); ctx.fill();
+      }
+      ctx.restore();
+      ctx.globalCompositeOperation = "source-over";
     }
 
     drawRoad(world) {
@@ -537,14 +703,39 @@
         if (flying) { ctx.rotate(-side * 0.5); ctx.fillStyle = "rgba(210,230,255,0.12)"; ctx.beginPath(); ctx.ellipse(-5, side * 5, 9, 3.4, 0, 0, TAU); ctx.fill(); }
         ctx.restore();
       }
+      // 脚（飛んでいる間は後ろへ流れる）
+      ctx.strokeStyle = "rgba(20,16,24,0.85)"; ctx.lineWidth = 0.7;
+      for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+        const bx = -1 + i * 2, sw2 = flying ? 0.5 + Math.sin(f.wing * 0.3 + i) * 0.1 : 1.1;
+        ctx.beginPath(); ctx.moveTo(bx, side * 2);
+        ctx.quadraticCurveTo(bx - 3, side * (3 + sw2), bx - 5 - sw2 * 2, side * (4 + sw2 * 2.2));
+        ctx.stroke();
+      }
       ctx.fillStyle = "#2b2330"; ctx.beginPath(); ctx.ellipse(-3, 0, 5.5, 3.2, 0, 0, TAU); ctx.fill();
       ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 0.6;
       for (let i = -5; i <= -1; i += 2) { ctx.beginPath(); ctx.moveTo(i, -2.8); ctx.lineTo(i, 2.8); ctx.stroke(); }
       ctx.fillStyle = "#3d3140"; ctx.beginPath(); ctx.ellipse(2, 0, 3.2, 3, 0, 0, TAU); ctx.fill();
       ctx.fillStyle = "#4a3a42"; ctx.beginPath(); ctx.arc(5.6, 0, 2.4, 0, TAU); ctx.fill();
-      ctx.fillStyle = "#d8453c";
+      // 触角：風になびく（この 2 本が JO＝風と音の感覚器）
+      ctx.strokeStyle = "rgba(30,24,34,0.9)"; ctx.lineWidth = 0.8;
+      const bend = Math.max(-0.7, Math.min(0.7, (this.windBend || 0)));
+      for (const side of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(6.4, side * 1.4);
+        ctx.quadraticCurveTo(8.6, side * 2.4 + bend, 9.6 - Math.abs(bend), side * 3.4 + bend * 1.6);
+        ctx.stroke();
+      }
+      // 複眼：追っている光を映す（ハエ自身は、それが何かを知らない）
+      const gl = Math.min(1, (this.flyLit || 0));
+      ctx.fillStyle = `rgb(${190 + 60 * gl},${60 + 30 * gl},${55 + 25 * gl})`;
       ctx.beginPath(); ctx.arc(6.2, -2, 1.5, 0, TAU); ctx.fill();
       ctx.beginPath(); ctx.arc(6.2, 2, 1.5, 0, TAU); ctx.fill();
+      if (gl > 0.08) {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = `rgba(255,235,200,${gl * 0.75})`;
+        ctx.beginPath(); ctx.arc(6.8, -2.3, 0.55, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(6.8, 1.7, 0.55, 0, TAU); ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+      }
       ctx.restore();
     }
   }
@@ -620,6 +811,7 @@
   const TYPE_COLOR = {
     light_steer: [90, 200, 255], light_fwd: [140, 170, 255], loom: [200, 120, 255],
     retina: [120, 190, 255], odor: [120, 240, 160], drive: [255, 120, 180],
+    odor_food: [120, 240, 160], odor_bad: [255, 150, 110], wind: [150, 255, 225], sound: [200, 255, 190],
   };
   const ATLAS_COLOR = [[110, 120, 255], [90, 200, 200], [120, 200, 255], [120, 230, 160], [255, 210, 120], [150, 150, 190]];
 
@@ -1001,7 +1193,7 @@
       // 見出し
       u.textAlign = "left"; u.font = `10px ${MONO}`;
       u.fillStyle = INK(0.85);
-      const src = B.circuit.meta.name === "flywire" ? "FLYWIRE v783 実データ（視覚・逃避）＋ 模式（嗅覚）" : "模式の回路（比較用）";
+      const src = B.circuit.meta.name === "flywire" ? "FLYWIRE v783 実データ（視覚・逃避・嗅覚・触角）" : "模式の回路（比較用）";
       u.fillText(`BRAIN  ${src}`, F.sideW + 12, 16);
       u.fillStyle = INK(0.5);
       u.fillText(`${B.N.toLocaleString()} neurons · ${B.nSyn.toLocaleString()} connections`, F.sideW + 12, 30);
@@ -1126,10 +1318,14 @@
         ["LC9/31 前進 右", this.modRate("light_fwd", "R"), 150, C_VIS],
         ["接近 LPLC2/LC4 左", this.modRate("loom", "L"), 220, C_LOOM],
         ["接近 LPLC2/LC4 右", this.modRate("loom", "R"), 220, C_LOOM],
-        ["匂い Or42b 左", this.modRate("odor", "L"), 150, C_OLF],
-        ["匂い Or42b 右", this.modRate("odor", "R"), 150, C_OLF],
+        ["匂い ORN 左", this.modRate("odor_food", "L") || this.modRate("odor", "L"), 150, C_OLF],
+        ["匂い ORN 右", this.modRate("odor_food", "R") || this.modRate("odor", "R"), 150, C_OLF],
+        ["排気 CO₂", (this.modRate("odor_bad", "L") + this.modRate("odor_bad", "R")) / 2, 120, C_WARN],
+        ["風 JO 左", this.modRate("wind", "L"), 120, C_MECH],
+        ["風 JO 右", this.modRate("wind", "R"), 120, C_MECH],
+        ["空気のふるえ JO-B", (this.modRate("sound", "L") + this.modRate("sound", "R")) / 2, 150, C_MECH],
         ["空腹", g ? g.hunger * 100 : 0, 100, C_WARN, g ? `${Math.round(g.hunger * 100)}%` : "—"],
-      ];
+      ].filter((r) => r[1] !== undefined);
       const rowH = Math.max(15, Math.min(22, (y + h - yy - 4) / rows.length));
       for (const [label, v, max, c, txt] of rows) {
         if (yy + rowH > y + h) break;
@@ -1225,6 +1421,7 @@
   const MONO = "ui-monospace, Menlo, Consolas, monospace";
   const INK = (a) => `rgba(210,220,255,${a})`;
   const C_VIS = [110, 200, 255], C_LOOM = [200, 130, 255], C_OLF = [120, 235, 160], C_MOTOR = [255, 205, 120], C_WARN = [255, 140, 120];
+  const C_MECH = [150, 250, 220]; // 触角の機械感覚（風・音）
 
   // 集団のラベル。FlyWire の入力には役割を添える
   function labelText(p) {
@@ -1234,6 +1431,14 @@
     if (/^LC10/.test(t)) return `${t} 追跡${side}`;
     if (/^(LC9|LC31a)$/.test(t)) return `${t} 前進${side}`;
     if (/^(LPLC2|LC4)$/.test(t)) return `${t} 接近${side}`;
+    if (/^ORN_V$/.test(t)) return `ORN_V 排気${side}`;
+    if (/^ORN_/.test(t)) return `${t} 匂い${side}`;
+    if (/^JO-B/.test(t)) return `${t} ふるえ${side}`;
+    if (/^JO-/.test(t)) return `${t} 風${side}`;
+    if (/PN$/.test(t)) return `${t} 投射${side}`;
+    if (/^KC/.test(t)) return `${t} キノコ体${side}`;
+    if (/^MBON/.test(t)) return `${t} 記憶出力${side}`;
+    if (/^LAL/.test(t)) return `${t} 旋回中枢${side}`;
     return t + side;
   }
 

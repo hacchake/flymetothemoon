@@ -147,6 +147,40 @@
       return c;
     }
 
+    // 触角が受ける空気：風のベクトル（wx, wy）、空気のふるえ（snd）、二酸化炭素（co2）。
+    // ハエの触角（Johnston 器官）は風の向きと音の両方を受ける。ハエ叩きが起こす前押しの風と
+    // 車の走行風・排気が、視覚とは別の手がかりになる
+    airAt(x, y) {
+      let wx = 0, wy = 0, snd = 0, co2 = 0;
+      for (const fan of this.fans) {
+        const dx = x - fan.x, dy = fan.y - y;
+        if (Math.abs(dx) < 95 && dy > -25 && dy < 520) {
+          const k = Math.max(0, (1 - Math.abs(dx) / 95) * (1 - dy / 520));
+          wy -= 1.7 * k; wx += Math.sign(dx) * 0.35 * k; snd += 0.45 * k;
+        }
+      }
+      // ハエ叩き：振り下ろすと前に空気を押す。叩かれる前の一瞬だけ強い
+      for (const s of this.swatters) {
+        if (s.shadow <= 0 && s.slam <= 0) continue;
+        const d = Math.hypot(x - s.tx, y - s.ty);
+        const k = Math.max(0, 1 - d / 240) * Math.max(s.shadow, s.slam * 1.5);
+        wy += 2.4 * k; snd += 2.2 * k;
+      }
+      for (const c of this.cars) {
+        const d = Math.hypot(x - c.x, y - c.y), k = Math.max(0, 1 - d / 280);
+        wx += c.dir * 1.3 * k; snd += 1.1 * k; co2 += 1.3 * k; // 排気には二酸化炭素
+      }
+      for (const g of this.frogs) {
+        if (g.tongue > 0) { const k = Math.max(0, 1 - Math.hypot(x - g.tx, y - g.ty) / 150) * g.tongue; snd += 2.0 * k; }
+        co2 += 0.5 * Math.max(0, 1 - Math.hypot(x - g.x, y - g.y) / 120); // カエルの息
+      }
+      for (const u of this.ufos) if (u.beam > 0) { const k = Math.max(0, 1 - Math.hypot(x - u.x, y - u.y - 150) / 340) * u.beam; wy -= 1.2 * k; snd += 1.4 * k; }
+      for (const p of this.planes) { const k = Math.max(0, 1 - Math.hypot(x - p.x, y - p.y) / 420); snd += 0.7 * k; }
+      // 夜の街の、ゆるやかな上昇気流
+      wy -= 0.12 * Math.sin(this.time * 0.35 + x * 0.004);
+      return { wx, wy, snd, co2 };
+    }
+
     // 危なさ 0..1（音楽の緊張に使う。ハエの脳には入らない）
     tension() {
       const f = this.fly;
@@ -256,7 +290,7 @@
       }
       for (let i = this.foods.length - 1; i >= 0; i--) {
         const fd = this.foods[i];
-        if (Math.hypot(f.x - fd.x, f.y - fd.y) < FLY_R + 22) {
+        if (Math.hypot(f.x - fd.x, f.y - fd.y) < FLY_R + 30) {
           this.foods.splice(i, 1);
           f.state = "eat"; f.t = 1.0; f.x = fd.x; f.y = fd.y - 4;
           this.events.push({ type: "eat", x: fd.x, y: fd.y });

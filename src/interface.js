@@ -19,7 +19,11 @@
       this.lumL = new Float32Array(this.cols); this.lumR = new Float32Array(this.cols);
       this.loomL = 0; this.loomR = 0;
       this.odorL = 0; this.odorR = 0;
-      this.P = { ornA: 180, ornBase: 35, ornTau: 1.2, photoBase: 0.5, photoMax: 150, ambient: 0.003, steerGain: 1, fwdGain: 1, antenna: 20 };
+      this.P = { ornA: 180, ornBase: 35, ornTau: 1.2, photoBase: 0.5, photoMax: 150, ambient: 0.003, steerGain: 1, fwdGain: 1, antenna: 20,
+        joBase: 3, windA: 55, soundA: 150, co2Base: 2, co2A: 90,
+        trendK: 12, castA: 55, castW: 2.4, upQuiet: 0.85, walkUp: 0.45, walkDown: 0 };
+      this.windL = this.windR = this.soundL = this.soundR = this.co2L = this.co2R = 0;
+      this.odorTrend = 0; this.odorNear = 0;
       this.odorAdapt = 0.01; // 嗅覚受容体の順応レベル（ゆっくり追いかける平均濃度）
       // 左目の列 c の中心方位（左が正）。右目は符号を反転
       this.center = Array.from({ length: this.cols }, (_, c) => (c + 0.5) * this.colDeg * DEG);
@@ -67,6 +71,30 @@
       this.odorR = world.odorAt(cx - lx, cy - ly);
       const mean = Math.max(0.005, (this.odorL + this.odorR) / 2);
       this.odorAdapt += (mean - this.odorAdapt) * Math.min(1, (1 / 60) / this.P.ornTau);
+      // 匂いが「濃くなりつつある」か「薄れつつある」か。
+      // ハエは左右の触角の差で匂い源へ向かうのではなく（触角の間隔は 0.5 mm しかない）、
+      // 進みながら濃さの変化を読む。濃くなる間はまっすぐ、薄れたら向きを変える
+      const lm = Math.log(mean);
+      if (this.odorFast === undefined) { this.odorFast = this.odorSlow = lm; }
+      this.odorFast += (lm - this.odorFast) * Math.min(1, (1 / 60) / 0.18);
+      this.odorSlow += (lm - this.odorSlow) * Math.min(1, (1 / 60) / 0.9);
+      this.clock = (this.clock || 0) + 1 / 60;
+      const strong = Math.min(1, mean / 0.05); // かすかな匂いでは判断しない
+      this.odorTrend = Math.max(-1, Math.min(1, (this.odorFast - this.odorSlow) * this.P.trendK)) * strong;
+      this.odorNear = Math.min(1, mean / 0.7); // 源のすぐそば。近づいたら速度を落として、行き過ぎないようにする
+
+      // 空気：触角（Johnston 器官）が受ける風の向きと、空気のふるえ
+      if (world.airAt) {
+        const aL = world.airAt(cx + lx, cy + ly), aR = world.airAt(cx - lx, cy - ly);
+        // 風は「左の触角をどれだけ押すか」で左右差になる。左方向の単位ベクトルは (sin h, -cos h)
+        const sx = Math.sin(f.h), sy = -Math.cos(f.h);
+        const push = (a, sign) => Math.max(0, (a.wx * sx + a.wy * sy) * sign) + 0.45 * Math.hypot(a.wx, a.wy);
+        this.windL = push(aL, 1); this.windR = push(aR, -1);
+        this.soundL = aL.snd; this.soundR = aR.snd;
+        this.co2L = aL.co2; this.co2R = aR.co2;
+      } else {
+        this.windL = this.windR = this.soundL = this.soundR = this.co2L = this.co2R = 0;
+      }
     }
 
     // 片目の光をまとめる。w(c) は列 c の重み（0 = 正面寄り）
@@ -99,7 +127,25 @@
           case "light_fwd": brain.setRate(p.id, photo(this.pooled(lum, front) * P.fwdGain)); break;
           case "loom": brain.setRate(p.id, 220 * (L ? this.loomL : this.loomR)); break;
           case "odor": brain.setRate(p.id, orn(L ? this.odorL : this.odorR)); break;
-          case "drive": brain.setRate(p.id, p.id === "WALK" ? 34 * urge : 7); break;
+          // FlyWire の実データの感覚ニューロン
+          case "odor_food": brain.setRate(p.id, orn(L ? this.odorL : this.odorR)); break;
+          case "odor_bad": brain.setRate(p.id, P.co2Base + P.co2A * Math.min(1.6, L ? this.co2L : this.co2R)); break;
+          case "wind": brain.setRate(p.id, P.joBase + P.windA * Math.min(2.2, L ? this.windL : this.windR)); break;
+          case "sound": brain.setRate(p.id, P.joBase + P.soundA * Math.min(2.2, L ? this.soundL : this.soundR)); break;
+          case "drive": {
+            // 作品側の駆動（FlyWire の外）。匂いの濃さの「変化」で探索のしかたを変える。
+            // ハエは左右の触角の差で匂い源に向かうのではなく、濃くなる間はまっすぐ進み、
+            // 薄れると左右へ大きく振って探す（casting）。ゆらぎの左右を交互に強めて、それを作る
+            const tr = this.odorTrend || 0, up = Math.max(0, tr), down = Math.max(0, -tr);
+            if (p.id === "WALK") {
+              const slowDown = 1 - 0.7 * (this.odorNear || 0); // 匂いの源の近くでは減速する
+              brain.setRate(p.id, Math.max(4, 34 * urge * (1 + P.walkUp * up - P.walkDown * down) * slowDown));
+              break;
+            }
+            const cast = Math.sin((this.clock || 0) * P.castW) > 0 ? "L" : "R";
+            brain.setRate(p.id, 7 * (1 - P.upQuiet * up) + (p.side === cast ? P.castA * down : 0));
+            break;
+          }
         }
       }
     }
@@ -116,6 +162,7 @@
       this.out = { speed: 0, turn: 0, dash: false };
       this.dn = { turnL: 0, turnR: 0, fwd: 0, back: 0, gf: 0 };
       this.bias = 0;
+      this.slow = 0; // 旋回信号のゆっくりした平均（順応）
     }
 
     // 零点合わせ：刺激のない暗闇で DNa02 の左右差を測り、以後それを差し引く。
@@ -135,7 +182,7 @@
       return d;
     }
 
-    read(brain, dt) {
+    read(brain, dt, { surge = 0 } = {}) {
       const r = (id) => (brain.popById[id] ? brain.popRate(id) : 0);
       // 旋回は DNa02 だけで読む。FlyWire から抜き出した回路では DNa02 は光と同じ側で発火したが、
       // DNa01 は左右の関係がはっきりしなかった（tests.html の開ループ試験）
@@ -143,7 +190,17 @@
       const fwd = r("DNp09_L") + r("DNp09_R");
       const back = r("MDN_L") + r("MDN_R");
       const gf = r("GF_L") + r("GF_R");
-      this.out.turn = this.OMEGA_MAX * Math.tanh((turnL - turnR - this.bias) / 60);
+      // 旋回への順応：いつまでも同じ向きの信号が続くときは、それを「まっすぐ」と見なしていく。
+      // コネクトームは 1 匹の脳なので左右が完全には対称でなく、匂いのような弱い刺激では、
+      // その偏り（たとえば AOTU019 の抑制は左右で 10 倍違う）が旋回を片側に張りつかせてしまう。
+      // 同じ向きに回り続ける状態も、これで数秒のうちにほどける（運動順応は実際の動物にもある）
+      const d = turnL - turnR;
+      this.slow += (d - this.slow) * Math.min(1, dt / 2.5);
+      // 匂いが濃くなっている間は、曲がらずに進む（odor-induced surge）。
+      // 実際のハエも、匂いの筋に入ると旋回をやめて風上へ直進する。
+      // 触角の左右の間隔は 0.5 mm しかなく、左右差では匂い源へ向かえないため、この切り替えが要になる
+      const straight = 1 - 0.9 * Math.max(0, Math.min(1, surge));
+      this.out.turn = this.OMEGA_MAX * Math.tanh((d - this.bias - this.slow * 0.75) / 60) * straight;
       this.out.speed = Math.max(20, this.V_MIN + (this.V_MAX - this.V_MIN) * Math.tanh(fwd / 160) - this.V_BRAKE * Math.tanh(back / 40));
       this.gfCool -= dt;
       this.out.dash = false;
