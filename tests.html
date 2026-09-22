@@ -37,12 +37,12 @@
   </table></div>
   <p id="status">実行中…</p>
 </main>
-<script src="src/circuit_flywire.js?v=40"></script>
-<script src="src/circuit.js?v=40"></script>
-<script src="src/brain.js?v=40"></script>
-<script src="src/interface.js?v=40"></script>
-<script src="src/world.js?v=40"></script>
-<script src="src/main.js?v=40"></script>
+<script src="src/circuit_flywire.js?v=41"></script>
+<script src="src/circuit.js?v=41"></script>
+<script src="src/brain.js?v=41"></script>
+<script src="src/interface.js?v=41"></script>
+<script src="src/world.js?v=41"></script>
+<script src="src/main.js?v=41"></script>
 <script>
 (function () {
   const C = FM.CIRCUITS.flywire || FM.CIRCUITS.schematic;
@@ -92,7 +92,8 @@
     // 視覚の接近検出を切った状態（＝影が見えない）で、触角の風と音だけで逃げられるか
     { name: "接近検出なしで生き延びる（触角の風と音だけ）", setups: [swatDark], metric: "alive", seconds: 20,
       base: (p) => /^(LPLC2|LC4)_/.test(p.from),
-      lesion: (p) => /^(LPLC2|LC4)_/.test(p.from) || /^JO-/.test(p.from), lesionName: "さらに触角の機械感覚 JO も切る" },
+      lesion: (p) => /^(LPLC2|LC4)_/.test(p.from) || /^JO-/.test(p.from), lesionName: "さらに触角の機械感覚 JO も切る",
+      expectSame: true, sameText: "触角だけでは足りない（視覚と重なったときに後押しする）", diffText: "触角だけでも逃げられる" },
   ];
 
   function measure(t, hurt) {
@@ -118,7 +119,9 @@
   for (const t of TESTS) jobs.push(() => {
     const a = measure(t, false), b = measure(t, true);
     const ok = t.expectSame ? b.value >= a.value * 0.75 : a.value > b.value;
-    const verdict = t.expectSame ? (ok ? "LC10 だけでも足りる" : "LC10 だけでは足りない") : ok ? "経路が効いている" : "差なし";
+    const verdict = t.expectSame
+      ? (ok ? (t.sameText || "LC10 だけでも足りる") : (t.diffText || "LC10 だけでは足りない"))
+      : ok ? "経路が効いている" : "差なし";
     document.getElementById("rows").insertAdjacentHTML("beforeend",
       `<tr><td>${t.name}</td><td>${a.text}</td><td>${b.text}</td><td>${t.lesionName}</td><td class="${ok ? "ok" : "ng"}">${verdict}</td></tr>`);
   });
