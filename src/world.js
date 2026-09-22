@@ -43,6 +43,9 @@
       this.webs = L("webs").map(([x, y, r]) => ({ x, y, r: r || 55 }));
       this.frogs = L("frogs").map(([x]) => this.makeFrog(x));
       this.fans = L("fans").map(([x, y]) => ({ x, y, spin: 0 }));
+      // 匂いの道具：熟した果実（遠くまで届く強い誘引）と、ドライアイス（二酸化炭素で追い返す）
+      this.fruits = L("fruits").map(([x, y]) => ({ x, y, t: 0 }));
+      this.ices = L("ices").map(([x, y]) => ({ x, y, t: 0, life: 26 }));
       this.mirrors = L("mirrors").map(([x, y]) => ({ x, y }));
       this.road = stage.road ? { y: this.H - 38 } : null;
       this.cars = [];
@@ -141,6 +144,8 @@
     odorAt(x, y) {
       let c = 0;
       for (const f of this.foods) c += Math.exp(-Math.hypot(x - f.x, y - f.y) / 160);
+      // 熟した果実：発酵した果実の匂いは Or42b（ORN_DM1）にいちばんよく効く
+      for (const f of this.fruits) c += 2.2 * Math.exp(-Math.hypot(x - f.x, y - f.y) / 260);
       // ハエトリ紙は甘い匂い、酢トラップはもっと強い匂い（Or42b は酢酸エチルなどの果実の匂いに応える）
       for (const p of this.papers) c += 0.8 * Math.exp(-Math.hypot(x - p.x, y - (p.y + p.h / 2)) / 150);
       for (const v of this.vinegars) c += 1.4 * Math.exp(-Math.hypot(x - v.x, y - (v.y - 40)) / 190);
@@ -173,6 +178,13 @@
       for (const g of this.frogs) {
         if (g.tongue > 0) { const k = Math.max(0, 1 - Math.hypot(x - g.tx, y - g.ty) / 150) * g.tongue; snd += 2.0 * k; }
         co2 += 0.5 * Math.max(0, 1 - Math.hypot(x - g.x, y - g.y) / 120); // カエルの息
+      }
+      // ドライアイス：白い霧とともに二酸化炭素がたまる（重いので下へ広がる）
+      for (const ic of this.ices) {
+        const grow = Math.min(1, ic.t / 2.5), fade = Math.min(1, ic.life / 4);
+        const dx = (x - ic.x) / (110 * (0.5 + grow)), dy = (y - ic.y - 30 * grow) / (70 * (0.5 + grow));
+        co2 += 2.4 * fade * Math.exp(-(dx * dx + dy * dy));
+        wy += 0.25 * fade * Math.exp(-(dx * dx + dy * dy)); // 冷たい空気が下へ流れる
       }
       for (const u of this.ufos) if (u.beam > 0) { const k = Math.max(0, 1 - Math.hypot(x - u.x, y - u.y - 150) / 340) * u.beam; wy -= 1.2 * k; snd += 1.4 * k; }
       for (const p of this.planes) { const k = Math.max(0, 1 - Math.hypot(x - p.x, y - p.y) / 420); snd += 0.7 * k; }
@@ -288,6 +300,15 @@
         }
         if (c.cool > 0) c.cool -= dt;
       }
+      for (let i = this.fruits.length - 1; i >= 0; i--) {
+        const fr = this.fruits[i];
+        if (Math.hypot(f.x - fr.x, f.y - fr.y) < FLY_R + 34) {
+          this.fruits.splice(i, 1);
+          f.state = "eat"; f.t = 1.2; f.x = fr.x; f.y = fr.y - 6;
+          this.events.push({ type: "eat", x: fr.x, y: fr.y, big: true });
+          return;
+        }
+      }
       for (let i = this.foods.length - 1; i >= 0; i--) {
         const fd = this.foods[i];
         if (Math.hypot(f.x - fd.x, f.y - fd.y) < FLY_R + 30) {
@@ -344,6 +365,9 @@
       const f = this.fly, rng = this.rng;
       for (const z of this.zappers) if (z.zap > 0) z.zap -= dt;
       for (const fan of this.fans) fan.spin += dt * 14;
+      for (const fr of this.fruits) fr.t += dt;
+      for (const ic of this.ices) { ic.t += dt; ic.life -= dt; }
+      this.ices = this.ices.filter((ic) => ic.life > 0); // ドライアイスは昇華して消える
       // ハエ叩き：ついて回る → 狙う（影が大きくなる） → 叩く → 休む
       for (const s of this.swatters) {
         s.t -= dt;

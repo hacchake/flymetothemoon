@@ -206,6 +206,8 @@
       for (const p of world.papers) this.drawPaper(p, t);
       for (const z of world.zappers) this.drawZapper(z, t);
       for (const fd of world.foods) this.drawFood(fd, t);
+      for (const fr of world.fruits) this.drawFruit(fr, t);
+      for (const ic of world.ices) this.drawIce(ic, t);
       if (world.road) this.drawRoad(world);
       for (const c of world.cars) this.drawCar(c);
       for (const wb of world.webs) this.drawWeb(wb, world, t);
@@ -623,6 +625,49 @@
       ctx.fillStyle = "#c8ffd8"; ctx.beginPath(); ctx.arc(fd.x, fd.y, 6, 0, TAU); ctx.fill();
       ctx.strokeStyle = "rgba(157,245,180,0.5)"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(fd.x, fd.y, 11 + Math.sin(t * 4) * 2, 0, TAU); ctx.stroke();
+    }
+
+    // 熟した果実：匂いが波になって広がる（ハエの ORN_DM1 がいちばんよく応える匂い）
+    drawFruit(fr, t) {
+      const { ctx } = this;
+      ctx.save(); ctx.translate(fr.x, fr.y);
+      ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 3; k++) {
+        const ph = (t * 0.45 + k / 3) % 1, rr = 24 + ph * 150;
+        ctx.strokeStyle = `rgba(255,190,110,${0.16 * (1 - ph)})`; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(0, 0, rr, 0, TAU); ctx.stroke();
+      }
+      ctx.drawImage(glowSprite([255, 190, 110]), -34, -34, 68, 68);
+      ctx.globalCompositeOperation = "source-over";
+      // 割れた果実と、たかる小さな泡
+      ctx.fillStyle = "#c2632f"; ctx.beginPath(); ctx.ellipse(0, 0, 15, 13, 0.3, 0, TAU); ctx.fill();
+      ctx.fillStyle = "#ffcf7e"; ctx.beginPath(); ctx.ellipse(-2, -2, 9, 8, 0.3, 0, TAU); ctx.fill();
+      ctx.fillStyle = "rgba(90,40,20,0.7)"; ctx.beginPath(); ctx.ellipse(2, 3, 4, 3, 0.4, 0, TAU); ctx.fill();
+      ctx.fillStyle = "#4b7a2e"; ctx.fillRect(-1, -16, 2, 6);
+      ctx.restore();
+    }
+
+    // ドライアイス：白い霧が低く広がる。中は二酸化炭素で、ハエは失速して近づけない
+    drawIce(ic, t) {
+      const { ctx } = this;
+      const grow = Math.min(1, ic.t / 2.5), fade = Math.min(1, ic.life / 4);
+      const rx = 110 * (0.5 + grow), ry = 70 * (0.5 + grow);
+      ctx.save(); ctx.translate(ic.x, ic.y + 30 * grow);
+      for (let k = 0; k < 4; k++) {
+        const a = t * 0.5 + k * 1.7, px = Math.cos(a) * rx * 0.3, py = Math.sin(a * 0.7) * ry * 0.25;
+        const g = ctx.createRadialGradient(px, py, 2, px, py, rx * 0.75);
+        g.addColorStop(0, `rgba(226,240,255,${0.15 * fade})`); g.addColorStop(1, "rgba(200,225,255,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(px, py, rx * 0.75, ry * 0.75, 0, 0, TAU); ctx.fill();
+      }
+      ctx.restore();
+      // 塊そのもの
+      ctx.save(); ctx.translate(ic.x, ic.y);
+      ctx.fillStyle = `rgba(220,238,255,${0.85 * fade})`;
+      roundRect(ctx, -11, -8, 22, 16, 3); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${0.5 * fade})`; ctx.fillRect(-7, -5, 7, 4);
+      ctx.fillStyle = "rgba(150,190,240,0.55)"; ctx.font = "9px system-ui"; ctx.textAlign = "center";
+      ctx.fillText("CO₂", 0, -14);
+      ctx.restore();
     }
 
     drawCloud(c, moon, t) {
@@ -1053,6 +1098,7 @@
 
     // simDt：このフレームで脳が進んだ時間（0 のこともある）。dtFrame：画面の経過時間（動きの速さに使う）
     draw(senses, motor, t, simDt, dtFrame = 1 / 60, hud = {}) {
+      this.senses = senses; // 計器から読む
       if (!this.brain) return;
       if (!this.layout) this.buildLayout();
       const { fctx: c, w, h, brain: B } = this;
@@ -1352,16 +1398,31 @@
         segBar(u, cx + 60 + half, yy, half, 7, this.rate(`${id}_R`) / max, c);
         yy += rowH;
       }
-      // 計器：旋回・推力・方位
-      const o = motor.out, r = Math.max(18, Math.min(34, (y + h - yy - 26) / 2, cw / 6.6));
-      const gy = Math.min(y + h - r - 18, yy + r + 12);
+      // 計器：上段に旋回・推力・方位、下段に高さ・風・匂い
+      const o = motor.out, W2 = hud.world, f = W2 && W2.fly, S = this.senses;
+      const rows2 = y + h - yy - 30 > 110 ? 2 : 1; // 縦に余裕があれば 2 段
+      const r = Math.max(15, Math.min(34, (y + h - yy - 30) / (rows2 * 2.15), cw / 6.6));
+      const gy = Math.min(y + h - r * (rows2 * 2 - 1) - 20, yy + r + 10);
       const gx = [cx + cw / 6, cx + cw / 2, cx + (cw * 5) / 6];
       turnGauge(u, gx[0], gy, r, o.turn / 4.2);
       arcGauge(u, gx[1], gy, r, o.speed / 200, `${Math.round(o.speed)}`, "推力 px/s");
-      const f = hud.world && hud.world.fly;
       let moonAz = null;
-      if (hud.world) moonAz = hud.world.view(hud.world.moon.x, hud.world.moon.y).az;
+      if (W2) moonAz = W2.view(W2.moon.x, W2.moon.y).az;
       compass(u, gx[2], gy, r, f ? f.h : 0, moonAz);
+      if (rows2 === 2) {
+        const gy2 = gy + r * 2.15;
+        // 高さ：地面からどれだけ浮いているか
+        const alt = W2 ? Math.max(0, W2.ground - f.y) : 0;
+        arcGauge(u, gx[0], gy2, r, Math.min(1, alt / (W2 ? W2.H : 1000)), `${Math.round(alt)}`, "高さ px");
+        // 風：触角が受けている風の向きと強さ（JO）
+        let wx = 0, wy = 0;
+        if (W2 && W2.airAt) { const a = W2.airAt(f.x, f.y); wx = a.wx; wy = a.wy; }
+        windGauge(u, gx[1], gy2, r, wx, wy);
+        // 匂い：誘引（緑）と二酸化炭素（赤）を左右に振れる 1 本の針で
+        const attract = S ? Math.min(1, (S.odorL + S.odorR) / 2 / 0.8) : 0;
+        const co2 = S ? Math.min(1, (S.co2L + S.co2R) / 2 / 1.6) : 0;
+        odorGauge(u, gx[2], gy2, r, attract, co2);
+      }
       if (motor.dn.gf > motor.GF_THRESHOLD) {
         u.fillStyle = `rgba(255,110,130,${0.6 + 0.4 * Math.sin(performance.now() / 60)})`;
         u.font = `bold 10px ${MONO}`; u.textAlign = "right"; u.fillText("GF 逃避!", x + w - 10, y + 15);
@@ -1545,6 +1606,46 @@
       u.strokeStyle = "rgba(255,240,205,0.9)";
       u.beginPath(); u.arc(x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62, 3.2, 0, TAU); u.stroke();
     }
+  }
+
+  // 風：触角が受けている風の向きと強さ（Johnston 器官が読んでいるもの）
+  function windGauge(u, x, y, r, wx, wy) {
+    dialFace(u, x, y, r, "風 JO");
+    const m = Math.hypot(wx, wy);
+    u.strokeStyle = INK(0.22);
+    u.beginPath(); u.arc(x, y, r * 0.55, 0, TAU); u.stroke();
+    if (m > 0.02) {
+      const a = Math.atan2(wy, wx), L = r * 0.3 + Math.min(r * 0.55, m * r * 0.4);
+      u.strokeStyle = `rgba(150,250,220,${0.5 + 0.45 * Math.min(1, m)})`; u.lineWidth = 2;
+      u.beginPath(); u.moveTo(x - Math.cos(a) * r * 0.2, y - Math.sin(a) * r * 0.2); u.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); u.stroke();
+      // 矢じり
+      u.beginPath();
+      u.moveTo(x + Math.cos(a) * L, y + Math.sin(a) * L);
+      u.lineTo(x + Math.cos(a + 2.5) * L * 0.55, y + Math.sin(a + 2.5) * L * 0.55);
+      u.moveTo(x + Math.cos(a) * L, y + Math.sin(a) * L);
+      u.lineTo(x + Math.cos(a - 2.5) * L * 0.55, y + Math.sin(a - 2.5) * L * 0.55);
+      u.stroke();
+      u.lineWidth = 1;
+    }
+    u.fillStyle = INK(0.75); u.font = `10px ${MONO}`; u.textAlign = "center";
+    u.fillText(m.toFixed(1), x, y + r * 0.92);
+  }
+
+  // 匂い：誘引（緑・右）と二酸化炭素（赤・左）が、1 本の針を引き合う
+  function odorGauge(u, x, y, r, attract, co2) {
+    dialFace(u, x, y, r, "匂い CO₂");
+    const v = Math.max(-1, Math.min(1, attract - co2));
+    for (const [k, c] of [[-1, "rgba(255,140,110,0.5)"], [1, "rgba(120,235,160,0.5)"]]) {
+      u.strokeStyle = c; u.lineWidth = 2;
+      u.beginPath(); u.arc(x, y, r * 0.78, k > 0 ? -Math.PI * 0.42 : Math.PI * 1.08, k > 0 ? Math.PI * 0.08 : Math.PI * 1.42); u.stroke();
+    }
+    u.lineWidth = 1;
+    const a = -Math.PI / 2 + v * 1.15;
+    u.strokeStyle = v >= 0 ? "rgba(140,255,180,0.95)" : "rgba(255,150,120,0.95)"; u.lineWidth = 2;
+    u.beginPath(); u.moveTo(x, y + r * 0.1); u.lineTo(x + Math.cos(a) * r * 0.72, y + Math.sin(a) * r * 0.72); u.stroke();
+    u.lineWidth = 1;
+    u.fillStyle = INK(0.75); u.font = `10px ${MONO}`; u.textAlign = "center";
+    u.fillText(`${Math.round(attract * 100)}／${Math.round(co2 * 100)}`, x, y + r * 0.92);
   }
 
   function hex(c, x, y, r, fill) {

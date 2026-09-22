@@ -73,7 +73,13 @@
 
       let heat = false;
       for (const e of events) {
-        if (e.type === "eat") { this.eaten++; this.score += 50; this.energy = Math.min(100, this.energy + 40); this.say("+50 ごちそう", "good"); }
+        if (e.type === "eat") {
+          this.eaten++;
+          const big = !!e.big; // 熟した果実はごちそう
+          this.score += big ? 120 : 50;
+          this.energy = Math.min(100, this.energy + (big ? 85 : 40));
+          this.say(big ? "+120 熟した果実" : "+50 ごちそう", "good");
+        }
         if (e.type === "bump") { this.score -= 15; this.energy -= 4; }
         if (e.type === "heat") heat = true;
         if (e.type === "stuck") this.say({ paper: "ハエトリ紙に捕まった！ 連打して助けて", web: "クモの巣にかかった！ 連打して助けて", vinegar: "酢に落ちた！ 連打して引き上げて" }[e.kind] || "捕まった！ 連打して助けて", "bad", 3);

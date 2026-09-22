@@ -9,6 +9,8 @@
   const TOOLS = {
     lamp: { label: "ランタン", key: "1", hint: "押している間、光が灯る。電池に限りあり" },
     food: { label: "餌", key: "2", hint: "クリックで置く。匂いでハエを呼び、食べると元気になる" },
+    fruit: { label: "熟した果実", hint: "クリックで置く。発酵した匂いが遠くまで届き、ハエを強く呼ぶ" },
+    dryice: { label: "ドライアイス", hint: "クリックで置く。二酸化炭素がたまり、ハエは近づけず失速する" },
     cloud: { label: "雲", key: "3", hint: "クリックで置く。光を遮り、ハエの行く手をふさぐ" },
     fan: { label: "扇風機", key: "4", hint: "クリックで置く。上向きの風がハエを押し上げる" },
     mirror: { label: "鏡", key: "5", hint: "クリックで置く。月の光を映して光る（月が見える場所に）" },
@@ -37,10 +39,12 @@
     webs: { label: "クモの巣", make: (x, y) => [x, y, 55] },
     frogs: { label: "カエル", make: (x) => [x] },
     fireflies: { label: "ホタル", make: (x, y) => [x, y] },
+    fruits: { label: "熟した果実", make: (x, y) => [x, y] },
+    ices: { label: "ドライアイス", make: (x, y) => [x, y] },
     ufos: { label: "UFO", make: (x, y) => [x, y] },
     erase: { label: "消す" },
   };
-  const EDIT_TOOLS = ["lamp", "food", "cloud", "fan", "mirror"];
+  const EDIT_TOOLS = ["lamp", "food", "fruit", "dryice", "cloud", "fan", "mirror"];
   const songIds = () => Object.keys(FM.SONGS || {}); // audio.js を読まないページ（tests.html）でも動くように、使うときに読む
 
   // ---- 保存（ブラウザにだけ。消えても遊べる） ----
@@ -56,8 +60,8 @@
     return {
       id: "c" + Date.now().toString(36), name: "わたしのステージ", custom: true, H: 1600, par: 40, song: "swing",
       sky: true, road: false, start: [150, 1450], moon: [800, 170],
-      clouds: [], streetlights: [], zappers: [], papers: [], swatters: [], vinegars: [], webs: [], frogs: [], fireflies: [], ufos: [],
-      tools: { lamp: 12, food: 2, cloud: 2, fan: 1, mirror: 1 },
+      clouds: [], streetlights: [], zappers: [], papers: [], swatters: [], vinegars: [], webs: [], frogs: [], fireflies: [], ufos: [], fruits: [], ices: [],
+      tools: { lamp: 12, food: 2, fruit: 1, dryice: 1, cloud: 2, fan: 1, mirror: 1 },
       hint: "つくったステージ",
     };
   }
@@ -450,6 +454,8 @@
       if (T === "lamp" || T === "moon") return; // 押している間の操作（frame で処理）
       if (!g.use(T)) { g.say("もう使えない", "bad", 1.2); return; }
       if (T === "food") { w.foods.push({ x: p.x, y: p.y }); this.worldView.burst(p.x, p.y, [157, 245, 180], 10, 60); }
+      if (T === "fruit") { w.fruits.push({ x: p.x, y: p.y, t: 0 }); this.worldView.burst(p.x, p.y, [255, 200, 110], 14, 70); }
+      if (T === "dryice") { w.ices.push({ x: p.x, y: p.y, t: 0, life: 26 }); this.worldView.burst(p.x, p.y, [200, 230, 255], 16, 40); }
       if (T === "cloud") w.clouds.push({ x: p.x, y: p.y, r: 55 });
       if (T === "fan") w.fans.push({ x: p.x, y: p.y, spin: 0 });
       if (T === "mirror") w.mirrors.push({ x: p.x, y: p.y });

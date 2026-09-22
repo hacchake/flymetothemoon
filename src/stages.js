@@ -45,7 +45,7 @@
       hint: "ヘッドライトに誘われると、車にはねられる",
       start: [140, 1720], moon: [860, 150],
       streetlights: [[400, 1500], [760, 1300]], clouds: [[560, 900, 70]],
-      tools: { lamp: 12, food: 2, cloud: 2, fan: 1 },
+      tools: { lamp: 12, food: 2, fruit: 1, cloud: 2, fan: 1 },
     },
     {
       id: 7, name: "ホタルの川辺", H: 1800, par: 30, song: "ballad",
@@ -53,7 +53,7 @@
       start: [120, 1640], moon: [850, 150],
       fireflies: [[360, 1350], [700, 1100], [300, 800]], frogs: [[260], [620]],
       webs: [[520, 620, 60]],
-      tools: { lamp: 12, food: 2, cloud: 1, fan: 1 },
+      tools: { lamp: 12, food: 2, fruit: 1, cloud: 1, fan: 1 },
     },
     {
       id: 8, name: "真夜中の台所", H: 2200, par: 40, song: "bop", road: true,
@@ -62,21 +62,21 @@
       streetlights: [[700, 1700]], zappers: [[280, 1150]],
       papers: [[560, 1200, 180], [420, 560, 160]], swatters: [[600, 900]],
       clouds: [[820, 1050, 60]],
-      tools: { lamp: 14, food: 3, cloud: 2 },
+      tools: { lamp: 14, food: 2, fruit: 1, dryice: 1, cloud: 2 },
     },
     {
       id: 9, name: "果物屋の裏", H: 1800, par: 32, song: "bossa",
       hint: "酢の匂いは、空腹のハエにはたまらない",
       start: [500, 1640], moon: [500, 150],
       vinegars: [[300, 1740], [720, 1740]], webs: [[500, 900, 70], [260, 560, 55], [760, 480, 55]],
-      tools: { lamp: 12, food: 3, cloud: 1, mirror: 1 },
+      tools: { lamp: 12, food: 2, fruit: 1, dryice: 1, cloud: 1, mirror: 1 },
     },
     {
       id: 10, name: "未確認飛行物体", H: 2000, par: 36, song: "lounge", sky: true,
       hint: "UFO のビームに吸い込まれると、どこかへ降ろされる",
       start: [150, 1840], moon: [820, 150],
       ufos: [[500, 900], [300, 400]], clouds: [[700, 1250, 60]],
-      tools: { lamp: 14, food: 2, cloud: 2, fan: 1, mirror: 1 },
+      tools: { lamp: 14, food: 2, fruit: 1, dryice: 1, cloud: 2, fan: 1, mirror: 1 },
     },
     {
       id: 11, name: "月は遠い", H: 3000, par: 55, song: "swing", road: true, sky: true,
@@ -85,7 +85,7 @@
       streetlights: [[200, 2500], [800, 2300]], zappers: [[500, 1850], [180, 900]],
       papers: [[700, 1500, 180], [300, 1250, 170], [640, 560, 160]],
       swatters: [[500, 1300], [500, 600]], clouds: [[820, 1900, 70], [300, 700, 60]],
-      tools: { lamp: 18, food: 4, cloud: 3, fan: 1 },
+      tools: { lamp: 18, food: 3, fruit: 2, dryice: 2, cloud: 3, fan: 1 },
     },
     {
       id: 12, name: "FLY ME TO THE MOON", H: 3000, par: 70, song: "witching", road: true, sky: true,
@@ -95,12 +95,12 @@
       frogs: [[520]], vinegars: [[860, 2940]], webs: [[380, 1700, 60], [700, 950, 60]],
       papers: [[520, 1450, 170]], swatters: [[500, 1100]], ufos: [[400, 650]],
       clouds: [[600, 1900, 65], [260, 1050, 60]],
-      tools: { lamp: 20, food: 5, cloud: 3, fan: 2, mirror: 2 },
+      tools: { lamp: 20, food: 4, fruit: 2, dryice: 2, cloud: 3, fan: 2, mirror: 2 },
     },
   ];
 
   // 自由実験：何でも置ける
-  const ALL = { lamp: Infinity, food: Infinity, cloud: Infinity, fan: Infinity, mirror: Infinity, moon: Infinity,
+  const ALL = { lamp: Infinity, food: Infinity, fruit: Infinity, dryice: Infinity, cloud: Infinity, fan: Infinity, mirror: Infinity, moon: Infinity,
     street: Infinity, zapper: Infinity, paper: Infinity, swatter: Infinity, vinegar: Infinity, web: Infinity,
     frog: Infinity, firefly: Infinity, ufo: Infinity };
   FM.SANDBOX = {
