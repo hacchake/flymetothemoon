@@ -1,6 +1,7 @@
 // 起動・画面・入力・ループ・ステージエディタ
 (function () {
   const FM = (window.FM = window.FM || {});
+  FM.Q = { low: false }; // 重いときに絵を減らす合図（描画側が見る）
   const BRAIN_DT = 0.5; // ms
   const STEP = 1 / 60;
   const $ = (id) => document.getElementById(id);
@@ -81,6 +82,7 @@
       this.tool = "lamp";
       this.pointer = { down: false, x: 0, y: 0, in: false, sx: 0, sy: 0, speed: 0, lt: 0 };
       this.t = 0; this.acc = 0;
+      this.fpsAvg = 60; this.qHold = 0;
       this.buildBrain();
       this.resize();
       this.load(FM.STAGES[0], { demo: true });
@@ -601,6 +603,15 @@
       // rAF の時刻は、起動時に測った時刻より少し前のことがある。マイナスにしない
       const elapsed = Math.max(0, Math.min(0.25, (now - this.last) / 1000));
       this.last = now;
+      // 画面が重くなったら絵を軽くする（スマホや、熱で遅くなった端末で音が途切れないように）。
+      // 行き来しないよう、下げる線と戻す線を離してある
+      this.fpsAvg += (Math.min(90, 1 / Math.max(0.004, elapsed)) - this.fpsAvg) * 0.06;
+      this.qHold += elapsed;
+      if (this.qHold > 2.5) {
+        this.qHold = 0;
+        if (!FM.Q.low && this.fpsAvg < 42) FM.Q.low = true;
+        else if (FM.Q.low && this.fpsAvg > 54) FM.Q.low = false;
+      }
       this.acc += elapsed;
       this.brain.clearSpikes();
       let simDt = 0;

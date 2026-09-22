@@ -216,7 +216,8 @@
       this.bar = 0; this.beatIdx = 0; this.chorus = 0;
       this.next = ctx.currentTime + 0.1;
       this.applySong();
-      this.timer = setInterval(() => this.schedule(), 25);
+      // 画面の処理が重くなっても音が途切れないよう、少し先まで予約しておく（間隔も広く）
+      this.timer = setInterval(() => this.schedule(), 60);
     }
 
     // ---- ドラム：起動時に一度だけ合成して録音しておく ----
@@ -377,7 +378,7 @@
         }
         this.next += skip * beat;
       }
-      while (this.next < now + 0.3) {
+      while (this.next < now + 0.7) {
         const beat = 60 / this.song.bpm;
         this.playBeat(this.next, beat);
         this.next += beat;

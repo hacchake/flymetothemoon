@@ -156,7 +156,9 @@
         bind(set.pos, L.pos, 3); bind(set.col, L.col, 3); bind(set.sa, L.sa, 2);
         gl.drawArrays(gl.POINTS, 0, n);
       };
-      draw(this.atlas, this.atlas.n);
+      // 背景の全脳の雲は、重いときは点を間引いて描く（形はほとんど変わらない）
+      const low = window.FM && FM.Q && FM.Q.low;
+      draw(this.atlas, low ? Math.floor(this.atlas.n / 3) : this.atlas.n);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.neurons.sa); gl.bufferSubData(gl.ARRAY_BUFFER, 0, neuronSA);
       draw(this.neurons, this.neurons.n);
       if (cometCount > 0) {

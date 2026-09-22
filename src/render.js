@@ -155,7 +155,7 @@
         ctx.globalAlpha = tw;
         ctx.fillStyle = st.warm ? "#ffe6cf" : "#dfe6ff";
         ctx.fillRect(st.x, y, st.r, st.r);
-        if (st.r > 1.1) { // 明るい星は十字にきらめく
+        if (st.r > 1.1 && !(FM.Q && FM.Q.low)) { // 明るい星は十字にきらめく
           ctx.globalAlpha = tw * 0.35;
           ctx.fillRect(st.x - 2, y + st.r / 2 - 0.25, st.r + 4, 0.7);
           ctx.fillRect(st.x + st.r / 2 - 0.25, y - 2, 0.7, st.r + 4);
@@ -279,7 +279,7 @@
         this.vignette = { cv, w, h };
       }
       ctx.drawImage(this.vignette.cv, 0, 0, w, h);
-      if (!this.grain) {
+      if (!this.grain && !(FM.Q && FM.Q.low)) {
         const N = 128, cv = document.createElement("canvas");
         cv.width = cv.height = N;
         const c2 = cv.getContext("2d"), img = c2.createImageData(N, N), d = img.data;
@@ -287,9 +287,11 @@
         c2.putImageData(img, 0, 0);
         this.grain = cv;
       }
-      ctx.globalAlpha = 0.5;
-      ctx.drawImage(this.grain, -Math.floor(Math.random() * 128), -Math.floor(Math.random() * 128), 128 * Math.ceil(w / 128 + 1), 128 * Math.ceil(h / 128 + 1));
-      ctx.globalAlpha = 1;
+      if (!(FM.Q && FM.Q.low)) {
+        ctx.globalAlpha = 0.5;
+        ctx.drawImage(this.grain, -Math.floor(Math.random() * 128), -Math.floor(Math.random() * 128), 128 * Math.ceil(w / 128 + 1), 128 * Math.ceil(h / 128 + 1));
+        ctx.globalAlpha = 1;
+      }
     }
 
     drawPlane(p, t) {
@@ -504,6 +506,7 @@
         ctx.restore();
       }
       // 電線（手前の層）
+      const light = !(FM.Q && FM.Q.low);
       ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1.2;
       for (const w of this.wires) {
         const y = g - 150 - w.y;
@@ -517,6 +520,7 @@
       const gl = ctx.createLinearGradient(0, g, 0, g + 120);
       gl.addColorStop(0, "#0a0c1a"); gl.addColorStop(1, "#04050c");
       ctx.fillStyle = gl; ctx.fillRect(-50, g, 1100, 220);
+      if (!light) return;
       ctx.save();
       ctx.beginPath(); ctx.rect(-50, g, 1100, 220); ctx.clip();
       ctx.globalCompositeOperation = "lighter";
